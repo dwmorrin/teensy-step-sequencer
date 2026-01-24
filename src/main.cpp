@@ -55,8 +55,7 @@ void globalKeyPress(int key)
 void loop()
 {
   // 1. HARDWARE TASKS
-  myusb.Task();     // Poll USB bus
-  driver.process(); // check trigger pulse width (Turn OFF triggers)
+  myusb.Task(); // Poll USB bus
 
   // 2. TIMING ENGINE
   clockEngine.run(); // Check BPM timer -> Fire Triggers

@@ -1,49 +1,37 @@
 #include "OutputDriver.h"
 
-OutputDriver::OutputDriver()
-{
-  _offTime = 0;
-  _isActive = false;
-}
+IntervalTimer OutputDriver::_timer;
 
 void OutputDriver::init()
 {
-  // Initialize all mapped pins as Outputs and set them LOW
+  // Initialize all mapped pins as Outputs and set them off
   for (int i = 0; i < NUM_TRACKS; i++)
   {
     pinMode(OUTPUT_MAP[i], OUTPUT);
-    digitalWrite(OUTPUT_MAP[i], LOW);
+    // Set to safe "Idle" state immediately
+    digitalWrite(OUTPUT_MAP[i], TRIGGER_OFF);
   }
 }
 
 void OutputDriver::fireTriggers(uint16_t trackMask)
 {
-  // Optimization: If no tracks need to fire (mask is 0), do nothing.
+  // if no tracks need to fire (mask is 0), do nothing.
   if (trackMask == 0)
     return;
 
-  // 1. Turn ON the physical pins requested by the mask
+  // 1. Turn ON the triggers
   _writeHardware(trackMask, true);
 
   // 2. Set the timestamp to turn them OFF
   // Note: We use millis() for now. If you need tighter timing later,
   // we can easily swap this logic to use micros().
-  _offTime = millis() + PULSE_WIDTH_MS;
-  _isActive = true;
+  _timer.begin(turnOffISR, PULSE_WIDTH_MS * 1000);
 }
 
-void OutputDriver::process()
+void OutputDriver::turnOffISR()
 {
-  // This is called every loop iteration.
-  // It checks if we are currently holding a gate HIGH ("Active")
-  // and if the pulse width time has expired.
-  if (_isActive && millis() >= _offTime)
-  {
-    // Time is up! Turn everything OFF.
-    // We pass a full mask (0xFFFF) to ensure every track is pulled LOW.
-    _writeHardware(0xFFFF, false);
-    _isActive = false;
-  }
+  _timer.end();
+  _writeHardware(0xFFFF, false);
 }
 
 void OutputDriver::_writeHardware(uint16_t mask, bool state)
@@ -56,8 +44,9 @@ void OutputDriver::_writeHardware(uint16_t mask, bool state)
     // If the result is non-zero, the bit was ON.
     if (mask & (1 << i))
     {
-      // Write to the physical pin mapped in Config.h
-      digitalWrite(OUTPUT_MAP[i], state ? HIGH : LOW);
+      // "state" is true if we want to Fire, false if we want to Rest.
+      // We map this strictly to our Config constants.
+      digitalWrite(OUTPUT_MAP[i], state ? TRIGGER_ON : TRIGGER_OFF);
     }
   }
 }

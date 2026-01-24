@@ -15,3 +15,13 @@
 // Maps logical Track IDs (0-3) to physical Teensy Pins
 // We use a const array so we can easily swap this for Shift Register logic later
 const int OUTPUT_MAP[NUM_TRACKS] = {2, 3, 4, 5};
+
+// --- OUTPUT POLARITY ---
+
+// OPTION A: Direct Drive (LEDs, 74HCT245, 74HC595)
+// #define TRIGGER_ON HIGH
+// #define TRIGGER_OFF LOW
+
+// OPTION B: Inverted Drive (Transistors, 74LS04 inverter)
+#define TRIGGER_ON LOW
+#define TRIGGER_OFF HIGH
