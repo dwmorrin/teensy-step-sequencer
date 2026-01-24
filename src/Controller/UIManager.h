@@ -28,7 +28,6 @@ private:
   InterfaceMode _currentMode;
 
   // Specific Handlers to keep code clean
-  void _handleTransport(int key);
   void _handleStepEdit(int key);
   void _handlePerformance(int key); // The "Jamming" logic
 };

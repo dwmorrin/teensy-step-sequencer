@@ -1,11 +1,14 @@
 #include "UIManager.h"
+#include "Debug.h"
 
 // RENAMED MACROS (To avoid conflict with Teensy Core definitions)
-#define ASCII_SPACE 32
-#define ASCII_ENTER 13
-#define ASCII_TAB 9
-#define ASCII_ESC 27
 #define ASCII_BACKSPACE 8
+#define ASCII_TAB 9
+#define ASCII_LF 10
+#define ASCII_CR 13
+#define ASCII_ESC 27
+#define ASCII_SPACE 32
+#define ASCII_DELETE 127
 
 UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
     : _model(model), _driver(driver)
@@ -26,6 +29,7 @@ void UIManager::processInput()
 
 void UIManager::handleKeyPress(int key)
 {
+  LOG("Key Code Received: %d\n", key);
   // ----------------------------------------------------------------
   // 1. GLOBAL COMMANDS (Always Active)
   // ----------------------------------------------------------------
@@ -66,7 +70,7 @@ void UIManager::handleKeyPress(int key)
     _model.nextPattern();
 
   // Song Mode Toggle (Enter)
-  if (key == ASCII_ENTER)
+  if (key == ASCII_CR || key == ASCII_LF)
   {
     if (_model.getPlayMode() == MODE_PATTERN_LOOP)
     {
@@ -79,7 +83,7 @@ void UIManager::handleKeyPress(int key)
   }
 
   // Undo (Backspace)
-  if (key == ASCII_BACKSPACE)
+  if (key == ASCII_BACKSPACE || key == ASCII_DELETE)
   {
     _model.undo();
     return;
