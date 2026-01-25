@@ -98,7 +98,7 @@ void DisplayManager::_drawHeader()
 
 void DisplayManager::_drawGrid()
 {
-  int stepWidth = 8;
+  int stepWidth = 7;
   int trackHeight = 12;
   int startY = 16;
 
@@ -108,11 +108,11 @@ void DisplayManager::_drawGrid()
   // Iterate Tracks
   for (int track = 0; track < NUM_TRACKS; track++)
   {
-    // Draw Track Indicator (The "<" arrow)
+    // Draw Track Indicator
     if (track == _model.activeTrackID)
     {
       int arrowY = startY + (track * trackHeight) + 8;
-      _u8g2.drawStr(122, arrowY, "<");
+      _u8g2.drawStr(122, arrowY, _ui.getMode() == UI_MODE_PERFORM ? TRACK_PERFORM_STR : TRACK_EDIT_STR);
     }
 
     // Iterate Steps

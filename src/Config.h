@@ -25,3 +25,7 @@ const int OUTPUT_MAP[NUM_TRACKS] = {2, 3, 4, 5};
 // OPTION B: Inverted Drive (Transistors, 74LS04 inverter)
 #define TRIGGER_ON LOW
 #define TRIGGER_OFF HIGH
+
+// --- DISPLAY ---
+#define TRACK_EDIT_STR "<"
+#define TRACK_PERFORM_STR "*"
