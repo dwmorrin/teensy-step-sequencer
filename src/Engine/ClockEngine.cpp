@@ -5,14 +5,11 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
 {
   _lastStepTime = 0;
   _cachedBPM = 0;
+  _wasPlaying = false;
 }
 
 void ClockEngine::run()
 {
-  // 1. If we aren't playing, do nothing
-  if (!_model.isPlaying())
-    return;
-
   int targetBPM = _model.getBPM();
   if (targetBPM != _cachedBPM)
   {
@@ -22,27 +19,40 @@ void ClockEngine::run()
     _stepInterval = (60'000 / _cachedBPM) / 4;
   }
 
-  // 2. Check Time
+  bool isPlaying = _model.isPlaying();
+  if (!isPlaying)
+  {
+    _wasPlaying = false;
+    return;
+  }
+
+  if (isPlaying && !_wasPlaying)
+  {
+    _wasPlaying = true;
+    _handleStepFiring();
+    _lastStepTime = millis();
+    return;
+  }
+
   unsigned long currentMillis = millis();
   if (currentMillis - _lastStepTime >= _stepInterval)
   {
     _lastStepTime = currentMillis;
-
-    // 3. Advance the Brain
-    // This moves the cursor to the next step (and handles pattern wrapping)
     _model.advanceStep();
+    _handleStepFiring();
+  }
+}
 
-    // 4. Get Data for the NEW step
-    int patID = _model.getPlayingPatternID();
-    int step = _model.getCurrentStep();
+void ClockEngine::_handleStepFiring()
+{
+  int patID = _model.getPlayingPatternID();
+  int step = _model.getCurrentStep();
 
-    // Ask the model: "Which tracks are active for this specific moment?"
-    uint16_t mask = _model.getTriggersForStep(patID, step);
+  uint16_t mask = _model.getTriggersForStep(patID, step);
 
-    // 5. Fire Hardware
-    if (mask > 0)
-    {
-      _driver.fireTriggers(mask);
-    }
+  // Only talk to hardware if there is something to say
+  if (mask > 0)
+  {
+    _driver.fireTriggers(mask);
   }
 }
