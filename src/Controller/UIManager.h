@@ -25,18 +25,25 @@ public:
   InterfaceMode getMode() const { return _currentMode; };
   const char *getInputBuffer() const;
 
+  // Allows the DisplayManager to know which slot to highlight
+  int getSelectedSlot() const { return _uiSelectedSlot; }
+
 private:
   SequencerModel &_model;
   OutputDriver &_driver;
 
   InterfaceMode _currentMode;
 
+  // BPM Input State
   char _inputBuffer[4]; // holds "999" + null terminator
   int _inputPtr;        // current cursor position
 
-  // Specific Handlers to keep code clean
+  int _uiSelectedSlot;
+
   void _handleStepEdit(int key);
   void _handlePerformance(int key);
   void _handleBPMInput(int key);
   bool _handleGlobalKeys(int key);
+
+  void _handlePlaylistEdit(int key);
 };

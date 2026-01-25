@@ -2,7 +2,6 @@
 #include <Arduino.h>
 #include "Config.h"
 
-// A single 16-step pattern for all tracks
 struct Pattern
 {
   bool steps[NUM_TRACKS][NUM_STEPS];
@@ -32,11 +31,17 @@ public:
   void prevPattern();
 
   // --- PLAYLIST (SONG) ---
-  uint8_t playlist[MAX_SONG_LENGTH];
-  int playlistLength;
-  int playlistCursor; // Which index of the playlist are we playing?
   void setPlayMode(PlayMode mode);
   PlayMode getPlayMode() const { return _playMode; }
+
+  int getPlaylistLength() const;
+  int getPlaylistCursor() const;
+
+  // CRUD Operations for Playlist
+  uint8_t getPlaylistPattern(int slotIndex) const;
+  void setPlaylistPattern(int slotIndex, uint8_t patternID);
+  void insertPlaylistSlot(int slotIndex, uint8_t patternID);
+  void deletePlaylistSlot(int slotIndex);
 
   // --- EDITING ---
   // Toggles a step in the CURRENTLY VIEWED pattern
@@ -44,11 +49,10 @@ public:
   void clearCurrentPattern();
 
   // --- UNDO SYSTEM ---
-  void createSnapshot(); // Saves current View Pattern to undo buffer
-  void undo();           // Restores undo buffer to View Pattern
+  void createSnapshot();
+  void undo();
 
   // --- ENGINE INTERFACE ---
-  // The Clock Engine calls this to know what to play.
   // Returns a bitmask of triggers for the specific step in the specific pattern.
   uint16_t getTriggersForStep(int patternID, int step);
 
@@ -62,17 +66,21 @@ public:
   // Getters for the Engine/View
   int getCurrentStep() const { return _currentStep; }
 
-  // Tempo
+  // --- TEMPO ---
   void setBPM(int bpm);
   int getBPM() const;
 
 private:
   Pattern _patternPool[MAX_PATTERNS];
-  Pattern _undoBuffer; // Single level undo
+  Pattern _undoBuffer;
+
+  // Playlist State
+  uint8_t _playlist[MAX_SONG_LENGTH];
+  int _playlistLength;
+  int _playlistCursor;
 
   bool _playing;
   int _currentStep;
   PlayMode _playMode;
-
   int _bpm;
 };

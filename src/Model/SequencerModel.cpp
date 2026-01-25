@@ -2,7 +2,12 @@
 
 SequencerModel::SequencerModel()
 {
+  // Defaults
+  _bpm = 120; // Default if DEFAULT_BPM not defined, otherwise use constant
+#ifdef DEFAULT_BPM
   _bpm = DEFAULT_BPM;
+#endif
+
   _playing = false;
   _currentStep = 0;
   _playMode = MODE_PATTERN_LOOP;
@@ -12,11 +17,11 @@ SequencerModel::SequencerModel()
   activeTrackID = 0;
 
   // Initialize Playlist (Default: simple loop of Pattern 0)
-  playlistLength = 1;
-  playlistCursor = 0;
+  _playlistLength = 1;
+  _playlistCursor = 0;
   for (int i = 0; i < MAX_SONG_LENGTH; i++)
   {
-    playlist[i] = 0;
+    _playlist[i] = 0;
   }
 
   // Initialize Pattern Pool (Clear all)
@@ -32,6 +37,9 @@ SequencerModel::SequencerModel()
   }
 }
 
+// -------------------------------------------------------------------------
+// TEMPO
+// -------------------------------------------------------------------------
 void SequencerModel::setBPM(int bpm)
 {
   if (bpm < 10)
@@ -58,7 +66,7 @@ void SequencerModel::stop()
 {
   _playing = false;
   _currentStep = 0;
-  playlistCursor = 0; // Reset song position on stop
+  _playlistCursor = 0; // Reset song position on stop
 }
 
 // -------------------------------------------------------------------------
@@ -83,8 +91,85 @@ void SequencerModel::prevPattern()
 void SequencerModel::setPlayMode(PlayMode mode)
 {
   _playMode = mode;
-  // When switching modes, we might want to sync the cursor
-  // but for now, we leave it independent.
+}
+
+// -------------------------------------------------------------------------
+// PLAYLIST (SONG) CRUD
+// -------------------------------------------------------------------------
+int SequencerModel::getPlaylistLength() const
+{
+  return _playlistLength;
+}
+
+int SequencerModel::getPlaylistCursor() const
+{
+  return _playlistCursor;
+}
+
+uint8_t SequencerModel::getPlaylistPattern(int slotIndex) const
+{
+  if (slotIndex < 0 || slotIndex >= _playlistLength)
+    return 0;
+  return _playlist[slotIndex];
+}
+
+void SequencerModel::setPlaylistPattern(int slotIndex, uint8_t patternID)
+{
+  if (slotIndex < 0 || slotIndex >= _playlistLength)
+    return;
+
+  // Safety clamp
+  if (patternID >= MAX_PATTERNS)
+    patternID = 0;
+
+  _playlist[slotIndex] = patternID;
+}
+
+void SequencerModel::insertPlaylistSlot(int slotIndex, uint8_t patternID)
+{
+  // Prevent overflow
+  if (_playlistLength >= MAX_SONG_LENGTH)
+    return;
+
+  // Clamp index
+  if (slotIndex < 0)
+    slotIndex = 0;
+  if (slotIndex > _playlistLength)
+    slotIndex = _playlistLength;
+
+  // Shift elements to the right to make space
+  for (int i = _playlistLength; i > slotIndex; i--)
+  {
+    _playlist[i] = _playlist[i - 1];
+  }
+
+  // Insert new item
+  _playlist[slotIndex] = patternID;
+  _playlistLength++;
+}
+
+void SequencerModel::deletePlaylistSlot(int slotIndex)
+{
+  // Prevent empty playlist (must have at least 1 slot)
+  if (_playlistLength <= 1)
+    return;
+
+  if (slotIndex < 0 || slotIndex >= _playlistLength)
+    return;
+
+  // Shift elements to the left to fill gap
+  for (int i = slotIndex; i < _playlistLength - 1; i++)
+  {
+    _playlist[i] = _playlist[i + 1];
+  }
+
+  _playlistLength--;
+
+  // Safety: If cursor was at the end, pull it back so it doesn't point to void
+  if (_playlistCursor >= _playlistLength)
+  {
+    _playlistCursor = _playlistLength - 1;
+  }
 }
 
 // -------------------------------------------------------------------------
@@ -117,14 +202,11 @@ void SequencerModel::clearCurrentPattern()
 // -------------------------------------------------------------------------
 void SequencerModel::createSnapshot()
 {
-  // Copy current view pattern to undo buffer
   _undoBuffer = _patternPool[currentViewPatternID];
 }
 
 void SequencerModel::undo()
 {
-  // Swap buffer with current pattern
-  // (This allows "Redo" if you hit undo again)
   Pattern temp = _patternPool[currentViewPatternID];
   _patternPool[currentViewPatternID] = _undoBuffer;
   _undoBuffer = temp;
@@ -137,7 +219,7 @@ int SequencerModel::getPlayingPatternID() const
 {
   if (_playMode == MODE_SONG)
   {
-    return playlist[playlistCursor];
+    return _playlist[_playlistCursor];
   }
   else
   {
@@ -153,7 +235,6 @@ uint16_t SequencerModel::getTriggersForStep(int patternID, int step)
   {
     if (_patternPool[patternID].steps[t][step])
     {
-      // Set bit 't' to 1
       mask |= (1 << t);
     }
   }
@@ -172,14 +253,14 @@ bool SequencerModel::advanceStep()
     // If in SONG mode, move to the next pattern in the list
     if (_playMode == MODE_SONG)
     {
-      playlistCursor++;
-      if (playlistCursor >= playlistLength)
+      _playlistCursor++;
+      if (_playlistCursor >= _playlistLength)
       {
-        playlistCursor = 0; // Loop Song
+        _playlistCursor = 0; // Loop Song
       }
     }
 
-    return true; // "We wrapped around" (useful for UI cues)
+    return true; // "We wrapped around"
   }
 
   return false;

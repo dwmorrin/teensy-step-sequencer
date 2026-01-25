@@ -13,7 +13,8 @@
 UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
     : _model(model), _driver(driver)
 {
-  _currentMode = UI_MODE_STEP_EDIT; // Default to Composing
+  _currentMode = UI_MODE_STEP_EDIT;
+  _uiSelectedSlot = 0; // Initialize Playlist Cursor
 }
 
 void UIManager::init()
@@ -24,7 +25,6 @@ void UIManager::init()
 void UIManager::processInput()
 {
   // Reserved for polling (Rotary Encoders, etc.)
-  // Currently, main.cpp pushes keys here via handleKeyPress.
 }
 
 void UIManager::handleKeyPress(int key)
@@ -34,19 +34,15 @@ void UIManager::handleKeyPress(int key)
   // ----------------------------------------------------------------
   // PRIORITY 1: EXCLUSIVE MODALS (The Trap)
   // ----------------------------------------------------------------
-  // If we are inputting text/numbers, we DO NOT want Global keys
-  // to fire (e.g. Spacebar shouldn't stop music, Backspace shouldn't Undo).
   if (_currentMode == UI_MODE_BPM_INPUT)
   {
     _handleBPMInput(key);
-    return; // STOP HERE.
+    return;
   }
 
   // ----------------------------------------------------------------
   // PRIORITY 2: GLOBAL / COMMON NAVIGATION
   // ----------------------------------------------------------------
-  // Checks for Space, Tab, Undo, etc.
-  // If one of these fires, we return immediately.
   if (_handleGlobalKeys(key))
   {
     return;
@@ -55,23 +51,30 @@ void UIManager::handleKeyPress(int key)
   // ----------------------------------------------------------------
   // PRIORITY 3: CONTEXT SPECIFIC
   // ----------------------------------------------------------------
-  switch (_currentMode)
+  // If in Song Mode, override standard behavior to edit playlist
+  if (_model.getPlayMode() == MODE_SONG)
   {
-  case UI_MODE_STEP_EDIT:
-    _handleStepEdit(key);
-    break;
-  case UI_MODE_PERFORM:
-    _handlePerformance(key);
-    break;
-  default:
-    break;
+    _handlePlaylistEdit(key);
+  }
+  else
+  {
+    switch (_currentMode)
+    {
+    case UI_MODE_STEP_EDIT:
+      _handleStepEdit(key);
+      break;
+    case UI_MODE_PERFORM:
+      _handlePerformance(key);
+      break;
+    default:
+      break;
+    }
   }
 }
 
 // Moves all the "Generic" logic out of the main function
 bool UIManager::_handleGlobalKeys(int key)
 {
-
   // Transport (Spacebar)
   if (key == ASCII_SPACE)
   {
@@ -79,7 +82,7 @@ bool UIManager::_handleGlobalKeys(int key)
       _model.stop();
     else
       _model.play();
-    return true; // Key Consumed
+    return true;
   }
 
   // Mode Toggle (TAB)
@@ -90,15 +93,20 @@ bool UIManager::_handleGlobalKeys(int key)
   }
 
   // Pattern Navigation
-  if (key == '[')
+  // Only handle globally if NOT in Song Mode.
+  // In Song Mode, these keys edit the playlist slot value.
+  if (_model.getPlayMode() != MODE_SONG)
   {
-    _model.prevPattern();
-    return true;
-  }
-  if (key == ']')
-  {
-    _model.nextPattern();
-    return true;
+    if (key == '[')
+    {
+      _model.prevPattern();
+      return true;
+    }
+    if (key == ']')
+    {
+      _model.nextPattern();
+      return true;
+    }
   }
 
   // Song Mode Toggle (Enter)
@@ -207,15 +215,65 @@ void UIManager::_handlePerformance(int key)
   if (key == '4')
     targetTrack = 3;
 
-  // If valid key, fire the hardware immediately
   if (targetTrack != -1)
   {
-    // Create bitmask: (1 << 0) = 1, (1 << 1) = 2, etc.
     uint16_t mask = (1 << targetTrack);
-
     _driver.fireTriggers(mask);
+  }
+}
 
-    // Future: If "Recording" is active, we would also write to the Model here.
+// --- PLAYLIST MODE: Keys edit the Song structure ---
+void UIManager::_handlePlaylistEdit(int key)
+{
+  // 1. Navigation (Left/Right)
+  if (key == 216)
+  { // Left Arrow
+    if (_uiSelectedSlot > 0)
+      _uiSelectedSlot--;
+  }
+  if (key == 215)
+  { // Right Arrow
+    if (_uiSelectedSlot < _model.getPlaylistLength() - 1)
+      _uiSelectedSlot++;
+  }
+
+  // 2. Change Pattern Value ([ / ])
+  if (key == ']' || key == '[')
+  {
+    int currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
+    if (key == ']')
+      currentPat++;
+    if (key == '[')
+      currentPat--;
+
+    // Wrap around logic
+    if (currentPat < 0)
+      currentPat = MAX_PATTERNS - 1;
+    if (currentPat >= MAX_PATTERNS)
+      currentPat = 0;
+
+    _model.setPlaylistPattern(_uiSelectedSlot, currentPat);
+  }
+
+  // 3. Insert Slot (i)
+  if (key == 'i' || key == 'I')
+  {
+    // Insert a copy of the current pattern at the current position
+    int currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
+    _model.insertPlaylistSlot(_uiSelectedSlot + 1, currentPat);
+    // Move selection to new slot
+    _uiSelectedSlot++;
+  }
+
+  // 4. Delete Slot (x)
+  if (key == 'x' || key == 'X')
+  {
+    _model.deletePlaylistSlot(_uiSelectedSlot);
+    // Bounds check in case we deleted the last one
+    if (_uiSelectedSlot >= _model.getPlaylistLength())
+    {
+      _uiSelectedSlot = _model.getPlaylistLength() - 1;
+    }
   }
 }
 
@@ -225,7 +283,7 @@ void UIManager::_handleBPMInput(int key)
   if (key >= '0' && key <= '9')
   {
     if (_inputPtr < 3)
-    { // Max 3 digits (e.g. 999)
+    {
       _inputBuffer[_inputPtr] = (char)key;
       _inputPtr++;
     }
@@ -237,7 +295,6 @@ void UIManager::_handleBPMInput(int key)
     if (_inputPtr > 0)
     {
       int newBPM = atoi(_inputBuffer);
-      // Constraint check: Don't allow 0 or crazy speeds
       if (newBPM >= 30 && newBPM <= 300)
       {
         _model.setBPM(newBPM);

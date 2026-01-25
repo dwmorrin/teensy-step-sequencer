@@ -25,4 +25,5 @@ private:
   // Internal Drawing Routines
   void _drawHeader();
   void _drawGrid();
+  void _drawPlaylist();
 };
