@@ -25,13 +25,11 @@ public:
   bool isPlaying() const { return _playing; }
 
   // --- NAVIGATION (VIEW) ---
-  // Controls what the user is seeing/editing
   int currentViewPatternID;
   int activeTrackID;
 
-  // *** MISSING DECLARATIONS ADDED HERE ***
-  void nextPattern(); // Increment view pattern
-  void prevPattern(); // Decrement view pattern
+  void nextPattern();
+  void prevPattern();
 
   // --- PLAYLIST (SONG) ---
   uint8_t playlist[MAX_SONG_LENGTH];
@@ -64,6 +62,10 @@ public:
   // Getters for the Engine/View
   int getCurrentStep() const { return _currentStep; }
 
+  // Tempo
+  void setBPM(int bpm);
+  int getBPM() const;
+
 private:
   Pattern _patternPool[MAX_PATTERNS];
   Pattern _undoBuffer; // Single level undo
@@ -71,4 +73,6 @@ private:
   bool _playing;
   int _currentStep;
   PlayMode _playMode;
+
+  int _bpm;
 };

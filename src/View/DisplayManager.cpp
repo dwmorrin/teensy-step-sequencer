@@ -1,8 +1,9 @@
 #include "DisplayManager.h"
 
 // Constructor: Initialize the U8g2 object and store the model reference
-DisplayManager::DisplayManager(SequencerModel &model)
+DisplayManager::DisplayManager(SequencerModel &model, UIManager &ui)
     : _model(model),
+      _ui(ui),
       _u8g2(U8G2_R0, U8X8_PIN_NONE)
 {
   _lastDrawTime = 0;
@@ -33,6 +34,23 @@ void DisplayManager::update()
 
 void DisplayManager::_drawHeader()
 {
+  _u8g2.setFont(u8g2_font_6x10_tf); // Ensure font is set
+
+  // --- MODE A: BPM INPUT (Modal Overlay) ---
+  if (_ui.getMode() == UI_MODE_BPM_INPUT)
+  {
+    _u8g2.setCursor(0, 8);
+    _u8g2.print("SET BPM: > ");
+    _u8g2.print(_ui.getInputBuffer());
+
+    // Blink cursor effect
+    if ((millis() / 500) % 2 == 0)
+      _u8g2.print("_");
+    return; // Don't draw the rest of the header
+  }
+
+  // --- MODE B: STANDARD HEADER ---
+
   // 1. Play State
   _u8g2.setCursor(0, 8);
   if (_model.isPlaying())
@@ -45,15 +63,14 @@ void DisplayManager::_drawHeader()
   }
 
   // 2. Pattern ID
-  _u8g2.setCursor(50, 8);
+  _u8g2.setCursor(45, 8);
   _u8g2.print("PAT:");
-  // Formatting: Print "01" instead of "1"
   if (_model.currentViewPatternID < 9)
     _u8g2.print("0");
   _u8g2.print(_model.currentViewPatternID + 1);
 
-  // 3. Mode (Song vs Loop)
-  _u8g2.setCursor(95, 8);
+  // 3. Song Mode Indicator
+  _u8g2.setCursor(80, 8);
   if (_model.getPlayMode() == MODE_SONG)
   {
     _u8g2.print("SONG");
@@ -62,6 +79,10 @@ void DisplayManager::_drawHeader()
   {
     _u8g2.print("LOOP");
   }
+
+  // 4. Current BPM Display (New!)
+  _u8g2.setCursor(110, 8);
+  _u8g2.print(_model.getBPM());
 }
 
 void DisplayManager::_drawGrid()

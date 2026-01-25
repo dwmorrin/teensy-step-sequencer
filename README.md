@@ -11,7 +11,7 @@ The application is designed as a standalone, embedded instrument. It functions a
 - **Microcontroller:** Teensy 4.1 (Selected for native USB Host and RAM capacity).
 - **Display:** 1.3" SH1106 OLED (I2C).
 - **Input:** Standard USB HID Keyboard.
-- **Output:** 5V Logic Triggers (buffered via 74HCT245).
+- **Output:** 5V Logic Triggers
 
 ## Software Architecture
 
@@ -57,3 +57,17 @@ Current pattern data is stored in volatile RAM and is lost upon power cycle. The
 ### Input Mapping
 
 Specific key bindings are defined within the `UIManager`. This class maps ASCII codes to internal commands. New input methods (e.g., encoders, MIDI input) should be implemented by routing their signals through the `UIManager` to ensure consistent state handling.
+
+## BPM calculation
+
+The "beat" is implicitly quarter notes, and the system is designed for you to program 16 sixteenth notes per measure.
+
+The math: we want to work out milliseconds per sixteenth note (or sixteenth note period).
+
+This is (60,000 milliseconds/minute)\*(minutes/quarter note beat)\*(1 quarter note beat/4 sixteenth note beats).
+
+This can be simplified to
+
+15,000 = (sixteenth note period) \* (BPM)
+
+from which we can note that a default trigger period of 15 ms is equivalent to 1000 BPM (ridiculously fast) so 15 ms is a good trigger size that won't "overlap" with a sixteenth note beat period.

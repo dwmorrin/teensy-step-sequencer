@@ -2,13 +2,13 @@
 #include "Debug.h"
 
 // RENAMED MACROS (To avoid conflict with Teensy Core definitions)
-#define ASCII_BACKSPACE 8
+#define ASCII_BS 8
 #define ASCII_TAB 9
 #define ASCII_LF 10
 #define ASCII_CR 13
 #define ASCII_ESC 27
 #define ASCII_SPACE 32
-#define ASCII_DELETE 127
+#define ASCII_DEL 127
 
 UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
     : _model(model), _driver(driver)
@@ -30,89 +30,116 @@ void UIManager::processInput()
 void UIManager::handleKeyPress(int key)
 {
   LOG("Key Code Received: %d\n", key);
+
   // ----------------------------------------------------------------
-  // 1. GLOBAL COMMANDS (Always Active)
+  // PRIORITY 1: EXCLUSIVE MODALS (The Trap)
   // ----------------------------------------------------------------
+  // If we are inputting text/numbers, we DO NOT want Global keys
+  // to fire (e.g. Spacebar shouldn't stop music, Backspace shouldn't Undo).
+  if (_currentMode == UI_MODE_BPM_INPUT)
+  {
+    _handleBPMInput(key);
+    return; // STOP HERE.
+  }
+
+  // ----------------------------------------------------------------
+  // PRIORITY 2: GLOBAL / COMMON NAVIGATION
+  // ----------------------------------------------------------------
+  // Checks for Space, Tab, Undo, etc.
+  // If one of these fires, we return immediately.
+  if (_handleGlobalKeys(key))
+  {
+    return;
+  }
+
+  // ----------------------------------------------------------------
+  // PRIORITY 3: CONTEXT SPECIFIC
+  // ----------------------------------------------------------------
+  switch (_currentMode)
+  {
+  case UI_MODE_STEP_EDIT:
+    _handleStepEdit(key);
+    break;
+  case UI_MODE_PERFORM:
+    _handlePerformance(key);
+    break;
+  default:
+    break;
+  }
+}
+
+// Moves all the "Generic" logic out of the main function
+bool UIManager::_handleGlobalKeys(int key)
+{
 
   // Transport (Spacebar)
   if (key == ASCII_SPACE)
   {
     if (_model.isPlaying())
-    {
       _model.stop();
-    }
     else
-    {
       _model.play();
-    }
-    return; // Don't process this key further
+    return true; // Key Consumed
   }
 
   // Mode Toggle (TAB)
-  // Switches between "Composing" (Grid) and "Jamming" (Pads)
   if (key == ASCII_TAB)
   {
-    if (_currentMode == UI_MODE_STEP_EDIT)
-    {
-      _currentMode = UI_MODE_PERFORM;
-    }
-    else
-    {
-      _currentMode = UI_MODE_STEP_EDIT;
-    }
-    return;
+    _currentMode = (_currentMode == UI_MODE_STEP_EDIT) ? UI_MODE_PERFORM : UI_MODE_STEP_EDIT;
+    return true;
   }
 
-  // Pattern Navigation ([ and ])
+  // Pattern Navigation
   if (key == '[')
+  {
     _model.prevPattern();
+    return true;
+  }
   if (key == ']')
+  {
     _model.nextPattern();
+    return true;
+  }
 
   // Song Mode Toggle (Enter)
   if (key == ASCII_CR || key == ASCII_LF)
   {
-    if (_model.getPlayMode() == MODE_PATTERN_LOOP)
-    {
-      _model.setPlayMode(MODE_SONG);
-    }
-    else
-    {
-      _model.setPlayMode(MODE_PATTERN_LOOP);
-    }
+    PlayMode pm = _model.getPlayMode();
+    _model.setPlayMode(pm == MODE_PATTERN_LOOP ? MODE_SONG : MODE_PATTERN_LOOP);
+    return true;
   }
 
   // Undo (Backspace)
-  if (key == ASCII_BACKSPACE || key == ASCII_DELETE)
+  if (key == ASCII_BS || key == ASCII_DEL)
   {
     _model.undo();
-    return;
+    return true;
   }
 
-  // Track Selection (Up/Down)
-  // Mapping standard Teensy USB Host arrow codes (218=Up, 217=Down)
+  // Track Selection (Arrows)
   if (key == 217)
-  { // Down Arrow
+  { // Down
     if (_model.activeTrackID < NUM_TRACKS - 1)
       _model.activeTrackID++;
+    return true;
   }
   if (key == 218)
-  { // Up Arrow
+  { // Up
     if (_model.activeTrackID > 0)
       _model.activeTrackID--;
+    return true;
   }
 
-  // ----------------------------------------------------------------
-  // 2. CONTEXT-SPECIFIC COMMANDS
-  // ----------------------------------------------------------------
-  if (_currentMode == UI_MODE_STEP_EDIT)
+  // BPM Input Toggle ('b')
+  if (key == 'b' || key == 'B')
   {
-    _handleStepEdit(key);
+    _currentMode = UI_MODE_BPM_INPUT;
+    _inputPtr = 0;
+    memset(_inputBuffer, 0, sizeof(_inputBuffer));
+    return true;
   }
-  else
-  {
-    _handlePerformance(key);
-  }
+
+  return false; // Key not used, pass it to Context Handler
 }
 
 // --- EDIT MODE: Keys toggle steps on the grid ---
@@ -190,4 +217,50 @@ void UIManager::_handlePerformance(int key)
 
     // Future: If "Recording" is active, we would also write to the Model here.
   }
+}
+
+void UIManager::_handleBPMInput(int key)
+{
+  // 1. Handle Numbers
+  if (key >= '0' && key <= '9')
+  {
+    if (_inputPtr < 3)
+    { // Max 3 digits (e.g. 999)
+      _inputBuffer[_inputPtr] = (char)key;
+      _inputPtr++;
+    }
+  }
+
+  // 2. Handle Confirm (Enter)
+  if (key == ASCII_CR || key == ASCII_LF)
+  {
+    if (_inputPtr > 0)
+    {
+      int newBPM = atoi(_inputBuffer);
+      // Constraint check: Don't allow 0 or crazy speeds
+      if (newBPM >= 30 && newBPM <= 300)
+      {
+        _model.setBPM(newBPM);
+      }
+    }
+    _currentMode = UI_MODE_STEP_EDIT; // Return to normal
+  }
+
+  // 3. Handle Cancel (ESC)
+  if (key == ASCII_ESC)
+  {
+    _currentMode = UI_MODE_STEP_EDIT;
+  }
+
+  // 4. Handle Backspace
+  if ((key == ASCII_BS || key == ASCII_DEL) && _inputPtr > 0)
+  {
+    _inputPtr--;
+    _inputBuffer[_inputPtr] = 0;
+  }
+}
+
+const char *UIManager::getInputBuffer() const
+{
+  return _inputBuffer;
 }

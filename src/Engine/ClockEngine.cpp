@@ -4,16 +4,7 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
     : _model(model), _driver(driver)
 {
   _lastStepTime = 0;
-  setBPM(DEFAULT_BPM); // Set initial speed from Config.h
-}
-
-void ClockEngine::setBPM(int bpm)
-{
-  // Calculate ms per step for 16th notes
-  // Formula: (60,000 ms / BPM) / 4 steps per beat
-  if (bpm < 1)
-    bpm = 1; // Safety
-  _stepInterval = (60000 / bpm) / 4;
+  _cachedBPM = 0;
 }
 
 void ClockEngine::run()
@@ -21,6 +12,15 @@ void ClockEngine::run()
   // 1. If we aren't playing, do nothing
   if (!_model.isPlaying())
     return;
+
+  int targetBPM = _model.getBPM();
+  if (targetBPM != _cachedBPM)
+  {
+    _cachedBPM = targetBPM;
+    // calculate ms per step
+    // (60,000 ms / BPM) / 4 steps per beat
+    _stepInterval = (60'000 / _cachedBPM) / 4;
+  }
 
   // 2. Check Time
   unsigned long currentMillis = millis();

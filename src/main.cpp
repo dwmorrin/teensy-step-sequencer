@@ -19,8 +19,8 @@ KeyboardController keyboard1(myusb);
 SequencerModel model;
 OutputDriver driver;
 ClockEngine clockEngine(model, driver); // Connects Brain + Hardware
-DisplayManager display(model);          // Connects Brain -> Screen
 UIManager ui(model, driver);            // Connects User -> Brain/Hardware
+DisplayManager display(model, ui);      // Connects Brain -> Screen
 
 // --- FORWARD DECLARATION ---
 void globalKeyPress(int key);
@@ -39,9 +39,6 @@ void setup()
   // 2. Init USB
   myusb.begin();
   keyboard1.attachPress(globalKeyPress);
-
-  // 3. Set Initial Tempo (Optional, as Constructor does it too)
-  clockEngine.setBPM(120);
 }
 
 // --- GLOBAL BRIDGE ---

@@ -10,7 +10,7 @@ public:
   // Dependency Injection: The Clock needs to control both the Brain and the Hands
   ClockEngine(SequencerModel &model, OutputDriver &driver);
 
-  void setBPM(int bpm);
+  // void setBPM(int bpm);
 
   // Call this in the main loop. It handles the timing checks.
   void run();
@@ -19,6 +19,7 @@ private:
   SequencerModel &_model;
   OutputDriver &_driver;
 
+  int _cachedBPM;
   unsigned long _lastStepTime;
   unsigned long _stepInterval; // Milliseconds between steps
 };

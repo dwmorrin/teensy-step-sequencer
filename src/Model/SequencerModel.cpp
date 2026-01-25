@@ -2,6 +2,7 @@
 
 SequencerModel::SequencerModel()
 {
+  _bpm = DEFAULT_BPM;
   _playing = false;
   _currentStep = 0;
   _playMode = MODE_PATTERN_LOOP;
@@ -29,6 +30,20 @@ SequencerModel::SequencerModel()
       }
     }
   }
+}
+
+void SequencerModel::setBPM(int bpm)
+{
+  if (bpm < 10)
+    bpm = 10;
+  if (bpm > 300)
+    bpm = 300;
+  _bpm = bpm;
+}
+
+int SequencerModel::getBPM() const
+{
+  return _bpm;
 }
 
 // -------------------------------------------------------------------------
