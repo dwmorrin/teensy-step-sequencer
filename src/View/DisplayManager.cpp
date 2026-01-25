@@ -29,15 +29,29 @@ void DisplayManager::update()
   _drawHeader();
 
   // CONTEXT SWITCHING:
-  if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR)
+  if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK ||
+      _ui.getMode() == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
-    _u8g2.setDrawColor(0); // Clear box background
-    _u8g2.drawBox(10, 20, 108, 30);
-    _u8g2.setDrawColor(1); // Border
-    _u8g2.drawFrame(10, 20, 108, 30);
+    _u8g2.setDrawColor(0);          // Clear box background
+    _u8g2.drawBox(10, 20, 108, 35); // Made slightly taller
+    _u8g2.setDrawColor(1);          // Border
+    _u8g2.drawFrame(10, 20, 108, 35);
 
-    _u8g2.setCursor(20, 38);
-    _u8g2.print("Clear Track? y/n");
+    _u8g2.setCursor(18, 35);
+
+    // Dynamic Text based on specific mode
+    if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK)
+    {
+      _u8g2.print("CLR TRACK? y/n");
+      _u8g2.setCursor(18, 48);
+      _u8g2.print("[#] for Pattern"); // Hint to user
+    }
+    else
+    {
+      _u8g2.print("CLR PATTERN? y/n");
+      _u8g2.setCursor(18, 48);
+      _u8g2.print("[#] for Track");
+    }
   }
   // If in Song Mode, show the Playlist Editor.
   // Otherwise, show the Step Grid.

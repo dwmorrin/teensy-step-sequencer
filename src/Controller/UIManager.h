@@ -5,10 +5,11 @@
 
 enum InterfaceMode
 {
-  UI_MODE_STEP_EDIT,     // Buttons 1-16 toggle steps on the Active Track
-  UI_MODE_PERFORM,       // Buttons 1-16 instantly fire Tracks 1-16
-  UI_MODE_BPM_INPUT,     // Modal input
-  UI_MODE_CONFIRM_CLEAR, // Modal confirm
+  UI_MODE_STEP_EDIT,             // Buttons 1-16 toggle steps on the Active Track
+  UI_MODE_PERFORM,               // Buttons 1-16 instantly fire Tracks 1-16
+  UI_MODE_BPM_INPUT,             // Modal input
+  UI_MODE_CONFIRM_CLEAR_TRACK,   // Modal confirm
+  UI_MODE_CONFIRM_CLEAR_PATTERN, // Modal confirm
 };
 
 class UIManager

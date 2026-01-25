@@ -40,7 +40,8 @@ void UIManager::handleKeyPress(int key)
     return;
   }
 
-  if (_currentMode == UI_MODE_CONFIRM_CLEAR)
+  if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
+      _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
     _handleConfirmClear(key);
     return;
@@ -208,7 +209,7 @@ void UIManager::_handleStepEdit(int key)
   // other editing commands
   if (key == '#')
   {
-    _currentMode = UI_MODE_CONFIRM_CLEAR;
+    _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
   }
 }
 
@@ -336,10 +337,24 @@ const char *UIManager::getInputBuffer() const
 
 void UIManager::_handleConfirmClear(int key)
 {
+  // '#' toggles between track and pattern clear
+  if (key == '#')
+  {
+    if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
+      _currentMode = UI_MODE_CONFIRM_CLEAR_PATTERN;
+    else
+      _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
+
+    return;
+  }
+
   // Confirm ('y' or Enter)
   if (key == 'y' || key == 'Y' || key == ASCII_CR || key == ASCII_LF)
   {
-    _model.clearTrack(_model.activeTrackID);
+    if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
+      _model.clearTrack(_model.activeTrackID);
+    else
+      _model.clearCurrentPattern();
     _currentMode = UI_MODE_STEP_EDIT;
   }
 
