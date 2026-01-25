@@ -197,6 +197,19 @@ void SequencerModel::clearCurrentPattern()
   }
 }
 
+void SequencerModel::clearTrack(int trackID)
+{
+  if (trackID < 0 || trackID >= NUM_TRACKS)
+    return;
+
+  createSnapshot(); // Undo support
+
+  for (int s = 0; s < NUM_STEPS; s++)
+  {
+    _patternPool[currentViewPatternID].steps[trackID][s] = false;
+  }
+}
+
 // -------------------------------------------------------------------------
 // UNDO SYSTEM
 // -------------------------------------------------------------------------

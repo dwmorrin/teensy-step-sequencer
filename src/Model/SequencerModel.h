@@ -47,6 +47,7 @@ public:
   // Toggles a step in the CURRENTLY VIEWED pattern
   void toggleStep(int track, int step);
   void clearCurrentPattern();
+  void clearTrack(int trackId);
 
   // --- UNDO SYSTEM ---
   void createSnapshot();

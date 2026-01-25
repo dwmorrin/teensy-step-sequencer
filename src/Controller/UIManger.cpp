@@ -40,6 +40,12 @@ void UIManager::handleKeyPress(int key)
     return;
   }
 
+  if (_currentMode == UI_MODE_CONFIRM_CLEAR)
+  {
+    _handleConfirmClear(key);
+    return;
+  }
+
   // ----------------------------------------------------------------
   // PRIORITY 2: GLOBAL / COMMON NAVIGATION
   // ----------------------------------------------------------------
@@ -198,6 +204,12 @@ void UIManager::_handleStepEdit(int key)
     _model.createSnapshot(); // Auto-save for Undo
     _model.toggleStep(_model.activeTrackID, targetStep);
   }
+
+  // other editing commands
+  if (key == '#')
+  {
+    _currentMode = UI_MODE_CONFIRM_CLEAR;
+  }
 }
 
 // --- PERFORM MODE: Keys fire outputs immediately ---
@@ -320,4 +332,20 @@ void UIManager::_handleBPMInput(int key)
 const char *UIManager::getInputBuffer() const
 {
   return _inputBuffer;
+}
+
+void UIManager::_handleConfirmClear(int key)
+{
+  // Confirm ('y' or Enter)
+  if (key == 'y' || key == 'Y' || key == ASCII_CR || key == ASCII_LF)
+  {
+    _model.clearTrack(_model.activeTrackID);
+    _currentMode = UI_MODE_STEP_EDIT;
+  }
+
+  // Cancel ('n', ESC, or 'c' again)
+  else if (key == 'n' || key == 'N' || key == ASCII_ESC || key == 'c')
+  {
+    _currentMode = UI_MODE_STEP_EDIT;
+  }
 }

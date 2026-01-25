@@ -29,9 +29,19 @@ void DisplayManager::update()
   _drawHeader();
 
   // CONTEXT SWITCHING:
+  if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR)
+  {
+    _u8g2.setDrawColor(0); // Clear box background
+    _u8g2.drawBox(10, 20, 108, 30);
+    _u8g2.setDrawColor(1); // Border
+    _u8g2.drawFrame(10, 20, 108, 30);
+
+    _u8g2.setCursor(20, 38);
+    _u8g2.print("Clear Track? y/n");
+  }
   // If in Song Mode, show the Playlist Editor.
   // Otherwise, show the Step Grid.
-  if (_model.getPlayMode() == MODE_SONG)
+  else if (_model.getPlayMode() == MODE_SONG)
   {
     _drawPlaylist();
   }

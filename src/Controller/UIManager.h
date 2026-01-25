@@ -5,9 +5,10 @@
 
 enum InterfaceMode
 {
-  UI_MODE_STEP_EDIT, // Buttons 1-16 toggle steps on the Active Track
-  UI_MODE_PERFORM,   // Buttons 1-16 instantly fire Tracks 1-16
-  UI_MODE_BPM_INPUT, // Modal input
+  UI_MODE_STEP_EDIT,     // Buttons 1-16 toggle steps on the Active Track
+  UI_MODE_PERFORM,       // Buttons 1-16 instantly fire Tracks 1-16
+  UI_MODE_BPM_INPUT,     // Modal input
+  UI_MODE_CONFIRM_CLEAR, // Modal confirm
 };
 
 class UIManager
@@ -44,6 +45,6 @@ private:
   void _handlePerformance(int key);
   void _handleBPMInput(int key);
   bool _handleGlobalKeys(int key);
-
   void _handlePlaylistEdit(int key);
+  void _handleConfirmClear(int key);
 };
