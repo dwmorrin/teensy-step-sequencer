@@ -87,25 +87,24 @@ void DisplayManager::_drawHeader()
   // --- MODE B: STANDARD HEADER ---
 
   // 1. Play State
-  _u8g2.setCursor(0, 8);
   if (_model.isPlaying())
   {
-    _u8g2.print("PLAY >>");
+    _u8g2.drawTriangle(0, 0, 0, 8, 8, 4);
   }
   else
   {
-    _u8g2.print("STOP ||");
+    _u8g2.drawBox(0, 0, 8, 9);
   }
 
   // 2. Pattern ID
-  _u8g2.setCursor(45, 8);
+  _u8g2.setCursor(20, 8);
   _u8g2.print("PAT:");
   if (_model.currentViewPatternID < 9)
     _u8g2.print("0");
   _u8g2.print(_model.currentViewPatternID + 1);
 
   // 3. Song Mode Indicator
-  _u8g2.setCursor(80, 8);
+  _u8g2.setCursor(65, 8);
   if (_model.getPlayMode() == MODE_SONG)
   {
     _u8g2.print("SONG");
@@ -116,7 +115,7 @@ void DisplayManager::_drawHeader()
   }
 
   // 4. Current BPM Display
-  _u8g2.setCursor(110, 8);
+  _u8g2.setCursor(100, 8);
   _u8g2.print(_model.getBPM());
 }
 
