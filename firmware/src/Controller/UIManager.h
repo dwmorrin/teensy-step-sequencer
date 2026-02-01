@@ -1,33 +1,36 @@
 #pragma once
+#include <functional>
 #include "Config.h"
 #include "Model/SequencerModel.h"
 #include "Engine/OutputDriver.h"
+#include "AnalogInput.h"
 
 enum InterfaceMode
 {
-  UI_MODE_STEP_EDIT,             // Buttons 1-16 toggle steps on the Active Track
-  UI_MODE_PERFORM,               // Buttons 1-16 instantly fire Tracks 1-16
-  UI_MODE_BPM_INPUT,             // Modal input
-  UI_MODE_CONFIRM_CLEAR_TRACK,   // Modal confirm
-  UI_MODE_CONFIRM_CLEAR_PATTERN, // Modal confirm
+  UI_MODE_STEP_EDIT,
+  UI_MODE_PERFORM,
+  UI_MODE_BPM_INPUT,
+  UI_MODE_CONFIRM_CLEAR_TRACK,
+  UI_MODE_CONFIRM_CLEAR_PATTERN,
 };
 
 class UIManager
 {
 public:
-  // Dependency Injection: The UI needs access to the Brain and the Hardware
   UIManager(SequencerModel &model, OutputDriver &driver);
 
   void init();
-  void processInput(); // Main polling method called in loop()
+  void processInput();
 
-  // The Router: Decides what a keypress does based on the current Mode
+  // The Router
   void handleKeyPress(int key);
+
+  // Callback for Hardware Test
+  using Callback = std::function<void()>;
+  void setHardwareTestCallback(Callback cb) { _onTestRequested = cb; }
 
   InterfaceMode getMode() const { return _currentMode; };
   const char *getInputBuffer() const;
-
-  // Allows the DisplayManager to know which slot to highlight
   int getSelectedSlot() const { return _uiSelectedSlot; }
 
 private:
@@ -35,11 +38,15 @@ private:
   OutputDriver &_driver;
 
   InterfaceMode _currentMode;
+  Callback _onTestRequested = nullptr;
+
+  // ANALOG INPUTS
+  AnalogInput _tempoPot;
+  AnalogInput _paramPot;
 
   // BPM Input State
-  char _inputBuffer[4]; // holds "999" + null terminator
-  int _inputPtr;        // current cursor position
-
+  char _inputBuffer[4];
+  int _inputPtr;
   int _uiSelectedSlot;
 
   void _handleStepEdit(int key);

@@ -11,10 +11,24 @@
 #define ASCII_DEL 127
 
 UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
-    : _model(model), _driver(driver)
+    : _model(model),
+      _driver(driver),
+      // TEMPO POT:
+      // If Inverted: Map 0(CW) -> 300.
+      // If Normal:   Map 0(CCW) -> 30.
+      _tempoPot(PIN_POT_TEMPO,
+                POT_INVERT_POLARITY ? 300 : 30, // Low Input Target
+                POT_INVERT_POLARITY ? 30 : 300, // High Input Target
+                4),
+
+      // PARAM POT (0-100):
+      _paramPot(PIN_POT_PARAM,
+                POT_INVERT_POLARITY ? 100 : 0,
+                POT_INVERT_POLARITY ? 0 : 100,
+                8)
 {
   _currentMode = UI_MODE_STEP_EDIT;
-  _uiSelectedSlot = 0; // Initialize Playlist Cursor
+  _uiSelectedSlot = 0;
 }
 
 void UIManager::init()
@@ -24,7 +38,23 @@ void UIManager::init()
 
 void UIManager::processInput()
 {
-  // Reserved for polling (Rotary Encoders, etc.)
+  // 1. POLL TEMPO POT
+  // "Last Action Wins": Only update Model if pot actually moves
+  if (_tempoPot.update())
+  {
+    int newBpm = _tempoPot.getValue();
+    _model.setBPM(newBpm);
+
+    // Optional: Log it if in debug mode
+    LOG("Tempo Pot Changed: %d BPM (Raw: %d)\n", newBpm, _tempoPot.getRaw());
+  }
+
+  // 2. POLL PARAM POT
+  // Currently unassigned, just debug logging
+  if (_paramPot.update())
+  {
+    LOG("Param Pot Changed: %d (Raw: %d)\n", _paramPot.getValue(), _paramPot.getRaw());
+  }
 }
 
 void UIManager::handleKeyPress(int key)
