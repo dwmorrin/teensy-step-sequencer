@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "35RASMT2BHSNTRX")(type "KiCad")(uri "${KIPRJMOD}/library/35RASMT2BHSNTRX.kicad_sym")(options "")(descr ""))
+)
