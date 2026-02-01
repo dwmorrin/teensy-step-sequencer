@@ -2,6 +2,16 @@
 
 This project implements a hardware-based step sequencer using the Teensy 4.1 microcontroller. It utilizes the Teensy's onboard USB Host capabilities to accept input from standard USB keyboards and drives hardware triggers via GPIO.
 
+## Gallery
+
+### Prototype
+![Breadboard Setup](docs/images/prototype-breadboard-setup.jpg)
+
+### Hardware Renders
+| Main Board | Switchplate |
+| :---: | :---: |
+| ![Main Board Render](docs/images/main-board-render.png) | ![Switchplate Render](docs/images/switchplate-render.png) |
+
 ## System Overview
 
 The application is designed as a standalone, embedded instrument. It functions as a 4-track step sequencer with support for pattern chaining (Song Mode), real-time performance triggers, and visual feedback via an I2C OLED display.
