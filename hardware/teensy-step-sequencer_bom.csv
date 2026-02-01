@@ -1,0 +1,21 @@
+Reference	Qty	Value	DNP	Exclude from BOM	Exclude from Board	Footprint	Datasheet
+C1	1	100u				Capacitor_THT:CP_Radial_D5.0mm_P2.50mm	~
+C2,C3,C4	3	100n				Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P2.50mm	~
+D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12,D13,D14,D15,D16,D19,D20	18	LED				LED_THT:LED_D3.0mm	~
+D17,D18,D21,D22,D23,D24,D25,D26,D27,D28,D29,D30,D31,D32,D33,D34	16	1N5817				Diode_THT:D_DO-15_P10.16mm_Horizontal	http://www.vishay.com/docs/88525/1n5817.pdf
+D35,D36,D37,D38,D39,D40,D41,D42,D43,D44,D45,D46,D47,D48,D49,D50,D51,D52,D53,D54,D55,D56,D57,D58,D59,D60,D61,D62,D63,D64,D65,D66	32	1N4148				Diode_THT:D_DO-35_SOD27_P7.62mm_Horizontal	~
+J1	1	SH1106 Screen				Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical	~
+J2	1	Output				Connector_PinHeader_2.54mm:PinHeader_2x08_P2.54mm_Vertical	~
+J3	1	USB_HOST				Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical	~
+J4	1	EXT_PWR				Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical	~
+R1,R2	2	4k7				Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal	~
+R3,R4,R5,R6,R7,R8,R9,R10,R11,R12,R13,R14,R15,R16,R17,R18,R20,R22,R23,R25,R26,R29,R30,R31,R32	25	330				Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal	~
+R19,R21,R24,R27,R28,R33,R34,R35,R36	9	1k				Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal	~
+RV1,RV2	2	100k				Potentiometer_THT:Potentiometer_Bourns_PTV09A-1_Single_Vertical	~
+SW1,SW2,SW3,SW4,SW5,SW6,SW7,SW8,SW9,SW10,SW11,SW12,SW13,SW14,SW15,SW16,SW17,SW18,SW19,SW20,SW21,SW22,SW23,SW24,SW25,SW26,SW27,SW28,SW29,SW30,SW31,SW32	32	CherryMX				CherryMX:CherryMX_1.00u	
+TP1	1	5V				TestPoint:TestPoint_Keystone_5000-5004_Miniature	~
+TP2	1	3V3				TestPoint:TestPoint_Keystone_5000-5004_Miniature	~
+TP3	1	GND				TestPoint:TestPoint_Keystone_5000-5004_Miniature	~
+U1	1	Teensy4.1				teensy:Teensy41	
+U2,U3	2	74HC595				Package_DIP:DIP-16_W7.62mm	http://www.ti.com/lit/ds/symlink/sn74hc595.pdf
+U4	1	74HCT245				Package_DIP:DIP-20_W7.62mm	http://www.ti.com/lit/gpn/sn74HC245
