@@ -1,67 +1,123 @@
 #include "DisplayManager.h"
 
-// Constructor: Initialize the U8g2 object and store the model reference
-DisplayManager::DisplayManager(SequencerModel &model, UIManager &ui)
+// Constructor: Initialize U8g2 and StepLeds
+DisplayManager::DisplayManager(SequencerModel &model, UIManager &ui, uint8_t latchPin)
     : _model(model),
       _ui(ui),
+      _leds(latchPin),
       _u8g2(U8G2_R0, U8X8_PIN_NONE)
 {
   _lastDrawTime = 0;
+  _hasRunDiagnostic = false;
+  _lastDiagnosticResult = false;
 }
 
 void DisplayManager::init()
 {
   _u8g2.begin();
   _u8g2.setFont(u8g2_font_profont10_mr); // Small, crisp font
+
+  // Initialize LEDs
+  _leds.begin();
+  _leds.clear();
+  _leds.show();
 }
 
 void DisplayManager::update()
 {
   // THROTTLE: Limit to ~30 FPS (33ms)
-  // This prevents the I2C bus from choking the CPU and delaying USB/Audio
   if (millis() - _lastDrawTime < 33)
     return;
 
   _lastDrawTime = millis();
 
-  _u8g2.clearBuffer();
+  // --- UPDATE LEDs (Synchronized with Screen) ---
+  _leds.clear();
 
-  _drawHeader();
-
-  // CONTEXT SWITCHING:
-  if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK ||
-      _ui.getMode() == UI_MODE_CONFIRM_CLEAR_PATTERN)
+  // CASE 1: HARDWARE DIAGNOSTIC (Chaser Animation)
+  if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    _u8g2.setDrawColor(0);          // Clear box background
-    _u8g2.drawBox(10, 20, 108, 35); // Made slightly taller
-    _u8g2.setDrawColor(1);          // Border
-    _u8g2.drawFrame(10, 20, 108, 35);
+    // Light up ONLY the current step (driven by fast clock)
+    _leds.set(_model.getCurrentStep(), true);
+  }
+  // CASE 2: NORMAL OPERATION
+  else if (_ui.getMode() == UI_MODE_STEP_EDIT || _ui.getMode() == UI_MODE_PERFORM)
+  {
+    int activeTrack = _model.activeTrackID;
+    int viewPattern = _model.currentViewPatternID;
 
-    _u8g2.setCursor(18, 35);
-
-    // Dynamic Text based on specific mode
-    if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK)
+    for (int i = 0; i < NUM_STEPS; i++)
     {
-      _u8g2.print("CLR TRACK? y/n");
-      _u8g2.setCursor(18, 48);
-      _u8g2.print("[#] for Pattern"); // Hint to user
-    }
-    else
-    {
-      _u8g2.print("CLR PATTERN? y/n");
-      _u8g2.setCursor(18, 48);
-      _u8g2.print("[#] for Track");
+      uint16_t mask = _model.getTriggersForStep(viewPattern, i);
+      // Check if the bit for the active track is set
+      if ((mask >> activeTrack) & 1)
+      {
+        _leds.set(i, true);
+      }
     }
   }
-  // If in Song Mode, show the Playlist Editor.
-  // Otherwise, show the Step Grid.
-  else if (_model.getPlayMode() == MODE_SONG)
+  _leds.show();
+
+  // --- UPDATE OLED ---
+  _u8g2.clearBuffer();
+
+  // CASE 1: HARDWARE DIAGNOSTIC
+  if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    _drawPlaylist();
+    // Run the Electrical Test ONCE per session
+    if (!_hasRunDiagnostic)
+    {
+      _lastDiagnosticResult = _leds.selfTest();
+      _hasRunDiagnostic = true;
+    }
+
+    _u8g2.setFont(u8g2_font_6x10_tf);
+    _u8g2.drawFrame(10, 20, 108, 30);
+    _u8g2.setCursor(20, 40);
+    _u8g2.print("HW CHECK: ");
+    _u8g2.print(_lastDiagnosticResult ? "OK" : "FAIL");
   }
   else
   {
-    _drawGrid();
+    // Reset diagnostic flag when we leave the mode
+    _hasRunDiagnostic = false;
+
+    _drawHeader();
+
+    // CONTEXT SWITCHING:
+    if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK ||
+        _ui.getMode() == UI_MODE_CONFIRM_CLEAR_PATTERN)
+    {
+      _u8g2.setDrawColor(0); // Clear box background
+      _u8g2.drawBox(10, 20, 108, 35);
+      _u8g2.setDrawColor(1); // Border
+      _u8g2.drawFrame(10, 20, 108, 35);
+
+      _u8g2.setCursor(18, 35);
+
+      // Dynamic Text based on specific mode
+      if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK)
+      {
+        _u8g2.print("CLR TRACK? y/n");
+        _u8g2.setCursor(18, 48);
+        _u8g2.print("[#] for Pattern"); // Hint to user
+      }
+      else
+      {
+        _u8g2.print("CLR PATTERN? y/n");
+        _u8g2.setCursor(18, 48);
+        _u8g2.print("[#] for Track");
+      }
+    }
+    // If in Song Mode, show the Playlist Editor
+    else if (_model.getPlayMode() == MODE_SONG)
+    {
+      _drawPlaylist();
+    }
+    else
+    {
+      _drawGrid();
+    }
   }
 
   _u8g2.sendBuffer();
@@ -86,7 +142,7 @@ void DisplayManager::_drawHeader()
 
   // --- MODE B: STANDARD HEADER ---
 
-  // 1. Play State
+  // Play State
   if (_model.isPlaying())
   {
     _u8g2.drawTriangle(0, 0, 0, 8, 8, 4);
@@ -96,14 +152,14 @@ void DisplayManager::_drawHeader()
     _u8g2.drawBox(0, 0, 8, 9);
   }
 
-  // 2. Pattern ID
+  // Pattern ID
   _u8g2.setCursor(20, 8);
   _u8g2.print("PAT:");
   if (_model.currentViewPatternID < 9)
     _u8g2.print("0");
   _u8g2.print(_model.currentViewPatternID + 1);
 
-  // 3. Song Mode Indicator
+  // Song Mode Indicator
   _u8g2.setCursor(65, 8);
   if (_model.getPlayMode() == MODE_SONG)
   {
@@ -114,7 +170,7 @@ void DisplayManager::_drawHeader()
     _u8g2.print("LOOP");
   }
 
-  // 4. Current BPM Display
+  // Current BPM Display
   _u8g2.setCursor(100, 8);
   _u8g2.print(_model.getBPM());
 }
@@ -200,27 +256,27 @@ void DisplayManager::_drawPlaylist()
 
     int x = startX + (i * slotWidth);
 
-    // 1. Draw Labels
+    // Draw Labels
     _u8g2.setCursor(x, startY);
     _u8g2.print("S");
     if (currentSlotIndex < 9)
       _u8g2.print("0");                // Pad single digits
     _u8g2.print(currentSlotIndex + 1); // Show human index (1-based)
 
-    // 2. Draw Pattern Value
+    // Draw Pattern Value
     _u8g2.setCursor(x, startY + 12);
     int patID = _model.getPlaylistPattern(currentSlotIndex);
     if (patID < 9)
       _u8g2.print("0");
     _u8g2.print(patID + 1);
 
-    // 3. Draw Selection Box (The Cursor)
+    // Draw Selection Box (The Cursor)
     if (currentSlotIndex == selectedSlot)
     {
       _u8g2.drawFrame(x - 2, startY - 9, slotWidth - 2, 26);
     }
 
-    // 4. Draw Playhead (Where the audio is)
+    // Draw Playhead (Where the audio is)
     // Only if we are playing and this slot is the active one
     if (_model.isPlaying() && currentSlotIndex == _model.getPlaylistCursor())
     {

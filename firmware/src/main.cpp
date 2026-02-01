@@ -7,7 +7,7 @@
 #include "View/DisplayManager.h"
 #include "Controller/UIManager.h"
 #include "Engine/OutputDriver.h"
-#include "Engine/ClockEngine.h" // Now it exists!
+#include "Engine/ClockEngine.h"
 
 // --- USB HOST SETUP ---
 USBHost myusb;
@@ -16,11 +16,16 @@ USBHub hub2(myusb); // Support for daisy-chained hubs
 KeyboardController keyboard1(myusb);
 
 // --- COMPONENT INSTANTIATION ---
+// Hardware Definitions
+const int PIN_SR_LATCH = 10;
+
 SequencerModel model;
 OutputDriver driver;
-ClockEngine clockEngine(model, driver); // Connects Brain + Hardware
-UIManager ui(model, driver);            // Connects User -> Brain/Hardware
-DisplayManager display(model, ui);      // Connects Brain -> Screen
+ClockEngine clockEngine(model, driver);
+UIManager ui(model, driver);
+
+// DisplayManager now receives the Latch Pin for the LEDs
+DisplayManager display(model, ui, PIN_SR_LATCH);
 
 // --- FORWARD DECLARATION ---
 void globalKeyPress(int key);
@@ -28,12 +33,12 @@ void globalKeyPress(int key);
 // --- SETUP ---
 void setup()
 {
-  // Optional: Wait for Serial for debugging (remove if standalone)
+  // Optional: Serial for debugging (remove if standalone)
   // Serial.begin(9600);
 
   // 1. Init Subsystems
   driver.init();
-  display.init();
+  display.init(); // Inits OLED and LEDs
   ui.init();
 
   // 2. Init USB
@@ -52,12 +57,12 @@ void globalKeyPress(int key)
 void loop()
 {
   // 1. HARDWARE TASKS
-  myusb.Task(); // Poll USB bus
+  myusb.Task();
 
   // 2. TIMING ENGINE
-  clockEngine.run(); // Check BPM timer -> Fire Triggers
+  clockEngine.run();
 
   // 3. INTERFACE
-  ui.processInput(); // Poll inputs
-  display.update();  // Draw screen (internally throttled to ~30fps)
+  ui.processInput();
+  display.update();
 }

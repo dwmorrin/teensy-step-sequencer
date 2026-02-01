@@ -92,6 +92,23 @@ bool UIManager::_handleGlobalKeys(int key)
     return true;
   }
 
+  // Hardware Test Toggle ('t')
+  if (key == 't')
+  {
+    if (_model.getPlayMode() == MODE_HARDWARE_TEST)
+    {
+      // Toggle OFF: Return to standard Pattern Loop and Stop
+      _model.setPlayMode(MODE_PATTERN_LOOP);
+      _model.stop();
+    }
+    else
+    {
+      // Toggle ON: Enter Test Mode
+      _model.setPlayMode(MODE_HARDWARE_TEST);
+    }
+    return true;
+  }
+
   // Mode Toggle (TAB)
   if (key == ASCII_TAB)
   {

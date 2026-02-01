@@ -10,6 +10,29 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
 
 void ClockEngine::run()
 {
+  // 1. TIMING OVERRIDE FOR DIAGNOSTICS
+  if (_model.getPlayMode() == MODE_HARDWARE_TEST)
+  {
+    _stepInterval = 50; // Fast 50ms refresh for chaser
+
+    // Force "Playing" logic so steps advance
+    if (!_wasPlaying)
+    {
+      _wasPlaying = true;
+      _lastStepTime = millis();
+    }
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - _lastStepTime >= _stepInterval)
+    {
+      _lastStepTime = currentMillis;
+      _model.advanceStep();
+      _handleStepFiring();
+    }
+    return; // Skip standard BPM logic
+  }
+
+  // 2. STANDARD OPERATION
   int targetBPM = _model.getBPM();
   if (targetBPM != _cachedBPM)
   {
@@ -45,6 +68,12 @@ void ClockEngine::run()
 
 void ClockEngine::_handleStepFiring()
 {
+  // OUTPUT OVERRIDE: Silence triggers during test
+  if (_model.getPlayMode() == MODE_HARDWARE_TEST)
+  {
+    return;
+  }
+
   int patID = _model.getPlayingPatternID();
   int step = _model.getCurrentStep();
 

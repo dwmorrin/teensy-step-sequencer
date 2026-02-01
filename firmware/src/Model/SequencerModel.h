@@ -10,7 +10,8 @@ struct Pattern
 enum PlayMode
 {
   MODE_PATTERN_LOOP, // Loop the current View Pattern
-  MODE_SONG          // Play through the Playlist
+  MODE_SONG,         // Play through the Playlist
+  MODE_HARDWARE_TEST // New Diagnostic Mode
 };
 
 class SequencerModel
