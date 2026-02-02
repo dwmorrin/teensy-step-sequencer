@@ -1,27 +1,32 @@
 # Teensy Step Sequencer
 
-This project implements a hardware-based step sequencer using the Teensy 4.1 microcontroller. It utilizes the Teensy's onboard USB Host capabilities to accept input from standard USB keyboards and drives hardware triggers via GPIO.
+This project implements a hardware-based step sequencer using the Teensy 4.1 microcontroller. It utilizes the Teensy's onboard USB Host capabilities to accept input from standard USB keyboards, alongside a custom 32-switch diode matrix for tactile control.
 
 ## Gallery
 
 ### Prototype
+
 ![Breadboard Setup](docs/images/prototype-breadboard-setup.jpg)
 
 ### Hardware Renders
-| Main Board | Switchplate |
-| :---: | :---: |
+
+|                       Main Board                        |                        Switchplate                        |
+| :-----------------------------------------------------: | :-------------------------------------------------------: |
 | ![Main Board Render](docs/images/main-board-render.png) | ![Switchplate Render](docs/images/switchplate-render.png) |
 
 ## System Overview
 
-The application is designed as a standalone, embedded instrument. It functions as a 4-track step sequencer with support for pattern chaining (Song Mode), real-time performance triggers, and visual feedback via an I2C OLED display.
+The application is designed as a standalone, embedded instrument. It functions as a 4-track step sequencer with support for pattern chaining (Song Mode), real-time performance triggers, and visual feedback via an I2C OLED display and a dedicated LED step array.
 
 ### Hardware Dependencies
 
 - **Microcontroller:** Teensy 4.1 (Selected for native USB Host and RAM capacity).
-- **Display:** 1.3" SH1106 OLED (I2C).
-- **Input:** Standard USB HID Keyboard.
-- **Output:** 5V Logic Triggers
+- **Display:** - 1.3" SH1106 OLED (I2C) for the graphical interface.
+  - 16x LEDs driven by 74HC595 Shift Registers for step visualization.
+- **Input:** - Standard USB HID Keyboard (via USB Host).
+  - 4x8 Diode Matrix Keyboard (32 switches).
+  - 2x Analog Potentiometers (Tempo and Parameter control).
+- **Output:** 4x 5V Logic Triggers (GPIO).
 
 ## Software Architecture
 
@@ -31,18 +36,26 @@ The codebase adopts a modular architecture separating data, presentation, and ha
   This directory contains the core logic and data structures. It serves as the single source of truth for the application, managing the Pattern Pool, the Playlist (Song Mode), and the Undo buffer. The Model is decoupled from hardware; it does not know if it is being driven by a clock or edited by a keyboard.
 
 - **View** (`src/View/`)
-  This directory handles all visual output. The `DisplayManager` observes the Model and renders the interface (Grid, Transport, Headers) to the OLED. It includes internal throttling logic to maintain a consistent frame rate without blocking the audio/timing threads.
+  This directory handles all visual output.
+  - `DisplayManager`: Observes the Model and renders the interface (Grid, Transport, Headers) to the OLED.
+  - `StepLeds`: Manages the 16-step LED array via SPI shift registers.
+    The view layer includes internal throttling logic to maintain a consistent frame rate without blocking the audio/timing threads.
 
 - **Controller** (`src/Controller/`)
-  This directory manages user input and state routing. The `UIManager` interprets raw USB key codes and translates them into system commands. It implements a state machine to switch between context-specific modes (e.g., Step Editing vs. Performance triggering).
+  This directory manages user input and state routing. The `UIManager` aggregates inputs from multiple hardware sources:
+  - **USB Keyboard:** Handled via the Teensy USBHost_t36 library.
+  - **Matrix:** Handled by `KeyMatrix`, a custom driver for scanning the 4x8 diode array.
+  - **Analog:** Handled by `AnalogInput`, which provides hysteresis and signal smoothing for potentiometers.
+
+  Inputs are translated into abstract `InputCommands` (e.g., `CMD_TRANSPORT_TOGGLE`), decoupling the physical control method from the internal application logic.
 
 - **Engine** (`src/Engine/`)
   This directory handles real-time operations.
   - `ClockEngine`: Manages the BPM timer and advances the Model's playhead.
-  - `OutputDriver`: Abstraction layer for the physical hardware. It converts track bitmasks into GPIO signals. This layer is isolated to facilitate future migration to Shift Registers or MIDI output without refactoring the core logic.
+  - `OutputDriver`: Abstraction layer for the physical hardware. It converts track bitmasks into GPIO signals using high-precision interrupt timers.
 
 - **Configuration** (`src/Config.h`)
-  A global header file defining build-time constraints, including track count, pattern limits, and pin mappings.
+  A global header file defining build-time constraints, including track count, pattern limits, pin mappings, and signal polarity.
 
 ## Expansion Guidelines
 
@@ -64,20 +77,12 @@ Current pattern data is stored in volatile RAM and is lost upon power cycle. The
 2.  Write to the SD card using the standard Arduino SD library.
 3.  Interface with the `UIManager` to allow loading and saving of projects.
 
-### Input Mapping
+## Timing Calculation
 
-Specific key bindings are defined within the `UIManager`. This class maps ASCII codes to internal commands. New input methods (e.g., encoders, MIDI input) should be implemented by routing their signals through the `UIManager` to ensure consistent state handling.
+The system timing is based on a standard 4/4 time signature where a "beat" represents a quarter note. The sequencer resolution is 16th notes (4 steps per beat).
 
-## BPM calculation
+The interval $T$ (milliseconds per step) is calculated as:
 
-The "beat" is implicitly quarter notes, and the system is designed for you to program 16 sixteenth notes per measure.
+$T = \frac{60,000}{BPM \times 4} = \frac{15,000}{BPM}$
 
-The math: we want to work out milliseconds per sixteenth note (or sixteenth note period).
-
-This is (60,000 milliseconds/minute)\*(minutes/quarter note beat)\*(1 quarter note beat/4 sixteenth note beats).
-
-This can be simplified to
-
-15,000 = (sixteenth note period) \* (BPM)
-
-from which we can note that a default trigger period of 15 ms is equivalent to 1000 BPM (ridiculously fast) so 15 ms is a good trigger size that won't "overlap" with a sixteenth note beat period.
+For a standard trigger pulse width of 15ms, the maximum theoretical tempo before pulse overlap is 1000 BPM.
