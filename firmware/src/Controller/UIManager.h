@@ -4,6 +4,7 @@
 #include "Engine/OutputDriver.h"
 #include "AnalogInput.h"
 #include "InputCommands.h"
+#include "KeyMatrix.h" // Added
 
 enum InterfaceMode
 {
@@ -22,13 +23,8 @@ public:
   void init();
   void processInput();
 
-  // The Translator: Maps Hardware Keys -> Commands
   void handleKeyPress(int key);
-
-  // The Executor: Performs actions based on Commands
   void handleCommand(InputCommand cmd);
-
-  // (Callback system removed - logic is now direct)
 
   InterfaceMode getMode() const { return _currentMode; };
   const char *getInputBuffer() const;
@@ -40,9 +36,10 @@ private:
 
   InterfaceMode _currentMode;
 
-  // ANALOG INPUTS
+  // INPUTS
   AnalogInput _tempoPot;
   AnalogInput _paramPot;
+  KeyMatrix _keyMatrix; // Added
 
   // BPM Input State
   char _inputBuffer[4];
@@ -52,4 +49,7 @@ private:
   // Internal Logic Handlers
   void _handleTrigger(int stepIndex);
   void _handleBPMInput(int key);
+
+  // Matrix Mapper
+  InputCommand _mapMatrixToCommand(int switchID);
 };

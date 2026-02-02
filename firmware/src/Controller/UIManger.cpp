@@ -20,10 +20,14 @@ UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
   _uiSelectedSlot = 0;
 }
 
-void UIManager::init() {}
+void UIManager::init()
+{
+  _keyMatrix.init(); // Init Pins
+}
 
 void UIManager::processInput()
 {
+  // 1. ANALOG
   if (_tempoPot.update())
   {
     _model.setBPM(_tempoPot.getValue());
@@ -32,10 +36,75 @@ void UIManager::processInput()
   {
     LOG("Param Pot: %d\n", _paramPot.getValue());
   }
+
+  // 2. MATRIX SCAN
+  int swID = _keyMatrix.getEvent();
+  if (swID > 0)
+  {
+    LOG("Matrix Event: Switch %d\n", swID);
+    InputCommand cmd = _mapMatrixToCommand(swID);
+    if (cmd != CMD_NONE)
+    {
+      handleCommand(cmd);
+    }
+  }
 }
 
 // ----------------------------------------------------------------------
-// TRANSLATOR: ASCII -> COMMAND
+// MAPPER: MATRIX SWITCH ID -> COMMAND
+// ----------------------------------------------------------------------
+InputCommand UIManager::_mapMatrixToCommand(int id)
+{
+  // ROW 1 (Physical): Steps 1-16
+  if (id >= 1 && id <= 16)
+  {
+    // Map 1->Trigger1 ... 16->Trigger16
+    // Enum is sequential, so we can cast math (be careful if enum changes!)
+    // CMD_TRIGGER_1 is the start.
+    return (InputCommand)(CMD_TRIGGER_1 + (id - 1));
+  }
+
+  // ROW 2 (Physical): Function Keys 17-32
+  switch (id)
+  {
+  case 17:
+    return CMD_TRACK_1; // A
+  case 18:
+    return CMD_TRACK_2; // B
+  case 19:
+    return CMD_TRACK_3; // C
+  case 20:
+    return CMD_TRACK_4; // D
+
+    // 21-24 Unassigned (E,F,G,H)
+
+  case 25:
+    return CMD_CLEAR_PROMPT; // Clear
+  case 26:
+    return CMD_TRACK_PREV; // Up
+  case 27:
+    return CMD_TRACK_NEXT; // Down
+  case 28:
+    return CMD_PATTERN_PREV; // Left
+  case 29:
+    return CMD_PATTERN_NEXT; // Right
+  case 30:
+    return CMD_TRANSPORT_TOGGLE; // Play
+  case 31:
+    return CMD_MODE_TOGGLE; // Mode
+
+  // 32 is SHIFT. It is handled as a modifier, not a command trigger.
+  // We can ignore it here, or use it to modify other commands.
+  case 32:
+    return CMD_NONE;
+
+  default:
+    return CMD_NONE;
+  }
+}
+
+// ----------------------------------------------------------------------
+// TRANSLATOR: ASCII -> COMMAND (Existing)
 // ----------------------------------------------------------------------
 void UIManager::handleKeyPress(int key)
 {
@@ -78,16 +147,9 @@ void UIManager::handleKeyPress(int key)
     cmd = CMD_PLAYLIST_NEXT;
 
   // 3. EDITING / TRIGGERS
-  // Row 1
-  else if (key == '1')
-    cmd = CMD_TRIGGER_1;
-  else if (key == '2')
-    cmd = CMD_TRIGGER_2;
-  else if (key == '3')
-    cmd = CMD_TRIGGER_3;
-  else if (key == '4')
-    cmd = CMD_TRIGGER_4;
-  // Row 2
+  else if (key >= '1' && key <= '4')
+    cmd = (InputCommand)(CMD_TRIGGER_1 + (key - '1'));
+  // (Simplified mapping logic for qwerty rows could go here, but explicit is fine)
   else if (key == 'q')
     cmd = CMD_TRIGGER_5;
   else if (key == 'w')
@@ -96,7 +158,6 @@ void UIManager::handleKeyPress(int key)
     cmd = CMD_TRIGGER_7;
   else if (key == 'r')
     cmd = CMD_TRIGGER_8;
-  // Row 3
   else if (key == 'a')
     cmd = CMD_TRIGGER_9;
   else if (key == 's')
@@ -105,7 +166,6 @@ void UIManager::handleKeyPress(int key)
     cmd = CMD_TRIGGER_11;
   else if (key == 'f')
     cmd = CMD_TRIGGER_12;
-  // Row 4
   else if (key == 'z')
     cmd = CMD_TRIGGER_13;
   else if (key == 'c')
@@ -113,8 +173,6 @@ void UIManager::handleKeyPress(int key)
   else if (key == 'v')
     cmd = CMD_TRIGGER_16;
 
-  // CONFLICT RESOLUTION: 'x'
-  // 'x' is Step 14 in Edit Mode, but 'Delete' in Song Mode.
   else if (key == 'x')
   {
     if (_model.getPlayMode() == MODE_SONG)
@@ -123,7 +181,7 @@ void UIManager::handleKeyPress(int key)
       cmd = CMD_TRIGGER_14;
   }
 
-  // 4. PLAYLIST / MODAL SPECIFIC
+  // 4. PLAYLIST / MODAL
   else if (key == 'i' || key == 'I')
     cmd = CMD_PLAYLIST_INSERT;
   else if (key == '#')
@@ -144,10 +202,31 @@ void UIManager::handleKeyPress(int key)
 // ----------------------------------------------------------------------
 void UIManager::handleCommand(InputCommand cmd)
 {
-  // --- PRIORITY 1: HARDWARE TEST ---
+  // --- DIRECT TRACK SELECTION (NEW) ---
+  if (cmd == CMD_TRACK_1)
+  {
+    _model.activeTrackID = 0;
+    return;
+  }
+  if (cmd == CMD_TRACK_2)
+  {
+    _model.activeTrackID = 1;
+    return;
+  }
+  if (cmd == CMD_TRACK_3)
+  {
+    _model.activeTrackID = 2;
+    return;
+  }
+  if (cmd == CMD_TRACK_4)
+  {
+    _model.activeTrackID = 3;
+    return;
+  }
+
+  // --- HARDWARE TEST ---
   if (cmd == CMD_TEST_TOGGLE)
   {
-    // Direct Model Control (Restored)
     if (_model.getPlayMode() == MODE_HARDWARE_TEST)
     {
       _model.setPlayMode(MODE_PATTERN_LOOP);
@@ -160,11 +239,26 @@ void UIManager::handleCommand(InputCommand cmd)
     return;
   }
 
-  // --- PRIORITY 2: MODAL HANDLING ---
+  // --- MODAL HANDLING ---
   if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
       _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
-    if (cmd == CMD_CONFIRM_YES || cmd == CMD_SONG_MODE_TOGGLE)
+    // CHECK FOR YES
+    // 1. Standard Confirm Commands (USB 'y', 'Enter')
+    // 2. Triggers 1-4 (Matrix Left Side)
+    bool isYes = (cmd == CMD_CONFIRM_YES || cmd == CMD_SONG_MODE_TOGGLE);
+    if (cmd >= CMD_TRIGGER_1 && cmd <= CMD_TRIGGER_4)
+      isYes = true;
+
+    // CHECK FOR NO
+    // 1. Standard Cancel Commands (USB 'n', 'Esc')
+    // 2. Triggers 13-16 (Matrix Right Side)
+    bool isNo = (cmd == CMD_CONFIRM_NO);
+    if (cmd >= CMD_TRIGGER_13 && cmd <= CMD_TRIGGER_16)
+      isNo = true;
+
+    // ACTION
+    if (isYes)
     {
       if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
         _model.clearTrack(_model.activeTrackID);
@@ -172,21 +266,22 @@ void UIManager::handleCommand(InputCommand cmd)
         _model.clearCurrentPattern();
       _currentMode = UI_MODE_STEP_EDIT;
     }
-    else if (cmd == CMD_CONFIRM_NO || cmd == CMD_CLEAR_PROMPT)
+    else if (isNo || cmd == CMD_CLEAR_PROMPT)
     {
+      // '#' / CLEAR acts as a toggle between Track/Pattern clear in this context
       if (cmd == CMD_CLEAR_PROMPT)
       {
         _currentMode = (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK) ? UI_MODE_CONFIRM_CLEAR_PATTERN : UI_MODE_CONFIRM_CLEAR_TRACK;
       }
       else
       {
-        _currentMode = UI_MODE_STEP_EDIT;
+        _currentMode = UI_MODE_STEP_EDIT; // Cancel
       }
     }
     return;
   }
 
-  // --- PRIORITY 3: GLOBAL KEYS ---
+  // --- GLOBAL KEYS ---
   switch (cmd)
   {
   case CMD_TRANSPORT_TOGGLE:
@@ -218,7 +313,7 @@ void UIManager::handleCommand(InputCommand cmd)
     break;
   }
 
-  // --- PRIORITY 4: CONTEXT SPECIFIC ---
+  // --- CONTEXT SPECIFIC ---
 
   // A. SONG MODE
   if (_model.getPlayMode() == MODE_SONG)

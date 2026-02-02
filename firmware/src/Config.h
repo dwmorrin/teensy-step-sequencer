@@ -12,26 +12,35 @@
 #define DEFAULT_BPM 120
 
 // --- HARDWARE MAPPING ---
-// Maps logical Track IDs (0-3) to physical Teensy Pins
 const int OUTPUT_MAP[NUM_TRACKS] = {25, 26, 27, 28};
 
 // --- INPUTS ---
 const int PIN_POT_TEMPO = 14;
 const int PIN_POT_PARAM = 15;
 
+// KEY MATRIX PINS
+// Rows (Active Low Output)
+const int PIN_ROW_1 = 36;
+const int PIN_ROW_2 = 34;
+const int PIN_ROW_3 = 38;
+const int PIN_ROW_4 = 40;
+
+// Cols (Input Pullup)
+const int PIN_COL_1 = 20;
+const int PIN_COL_2 = 17;
+const int PIN_COL_3 = 16;
+const int PIN_COL_4 = 41;
+const int PIN_COL_5 = 39;
+const int PIN_COL_6 = 37;
+const int PIN_COL_7 = 35;
+const int PIN_COL_8 = 33;
+
 // PCB REVISION NOTES
-// V1 Error: Pots are wired backwards (CW = 0V, CCW = 3.3V).
-// Set to true for V1. Set to false for V2 (Corrected).
 const bool POT_INVERT_POLARITY = true;
 
 // --- OUTPUT POLARITY ---
-// OPTION A: Direct Drive (Probing / LEDs)
 #define TRIGGER_ON HIGH
 #define TRIGGER_OFF LOW
-
-// OPTION B: Inverted Drive (Transistors)
-// #define TRIGGER_ON LOW
-// #define TRIGGER_OFF HIGH
 
 // --- DISPLAY ---
 #define TRACK_EDIT_STR "<"

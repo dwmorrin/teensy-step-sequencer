@@ -85,35 +85,42 @@ void DisplayManager::update()
     _drawHeader();
 
     // CONTEXT SWITCHING:
+    // If in Song Mode, show the Playlist Editor
     if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK ||
         _ui.getMode() == UI_MODE_CONFIRM_CLEAR_PATTERN)
     {
-      _u8g2.setDrawColor(0); // Clear box background
-      _u8g2.drawBox(10, 20, 108, 35);
-      _u8g2.setDrawColor(1); // Border
-      _u8g2.drawFrame(10, 20, 108, 35);
+      _u8g2.setDrawColor(0);         // Clear box background
+      _u8g2.drawBox(5, 20, 118, 40); // Slightly larger box
+      _u8g2.setDrawColor(1);         // Border
+      _u8g2.drawFrame(5, 20, 118, 40);
 
-      _u8g2.setCursor(18, 35);
+      _u8g2.setFont(u8g2_font_6x10_tf);
+      _u8g2.setCursor(12, 35);
 
-      // Dynamic Text based on specific mode
+      // Dynamic Title
       if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK)
       {
-        _u8g2.print("CLR TRACK? y/n");
-        _u8g2.setCursor(18, 48);
-        _u8g2.print("[#] for Pattern"); // Hint to user
+        _u8g2.print("CLR TRACK?");
       }
       else
       {
-        _u8g2.print("CLR PATTERN? y/n");
-        _u8g2.setCursor(18, 48);
-        _u8g2.print("[#] for Track");
+        _u8g2.print("CLR PATTERN?");
       }
+
+      // Input Guidance (Step Buttons)
+      _u8g2.setFont(u8g2_font_profont10_mr); // Smaller font for instructions
+      _u8g2.setCursor(12, 48);
+      _u8g2.print("YES: 1-4 | NO: 13-16");
+
+      _u8g2.setCursor(12, 57);
+      _u8g2.print("[CLEAR] to Toggle");
     }
-    // If in Song Mode, show the Playlist Editor
+
     else if (_model.getPlayMode() == MODE_SONG)
     {
       _drawPlaylist();
     }
+
     else
     {
       _drawGrid();
