@@ -1,7 +1,7 @@
 #include "UIManager.h"
 #include "Debug.h"
 
-// RENAMED MACROS (To avoid conflict with Teensy Core definitions)
+// MACROS
 #define ASCII_BS 8
 #define ASCII_TAB 9
 #define ASCII_LF 10
@@ -13,333 +13,354 @@
 UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
     : _model(model),
       _driver(driver),
-      // TEMPO POT:
-      // If Inverted: Map 0(CW) -> 300.
-      // If Normal:   Map 0(CCW) -> 30.
-      _tempoPot(PIN_POT_TEMPO,
-                POT_INVERT_POLARITY ? 300 : 30, // Low Input Target
-                POT_INVERT_POLARITY ? 30 : 300, // High Input Target
-                4),
-
-      // PARAM POT (0-100):
-      _paramPot(PIN_POT_PARAM,
-                POT_INVERT_POLARITY ? 100 : 0,
-                POT_INVERT_POLARITY ? 0 : 100,
-                8)
+      _tempoPot(PIN_POT_TEMPO, POT_INVERT_POLARITY ? 300 : 30, POT_INVERT_POLARITY ? 30 : 300, 4),
+      _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 100 : 0, POT_INVERT_POLARITY ? 0 : 100, 8)
 {
   _currentMode = UI_MODE_STEP_EDIT;
   _uiSelectedSlot = 0;
 }
 
-void UIManager::init()
-{
-  // Future: Load last used mode from Config/EEPROM
-}
+void UIManager::init() {}
 
 void UIManager::processInput()
 {
-  // 1. POLL TEMPO POT
-  // "Last Action Wins": Only update Model if pot actually moves
   if (_tempoPot.update())
   {
-    int newBpm = _tempoPot.getValue();
-    _model.setBPM(newBpm);
-
-    // Optional: Log it if in debug mode
-    LOG("Tempo Pot Changed: %d BPM (Raw: %d)\n", newBpm, _tempoPot.getRaw());
+    _model.setBPM(_tempoPot.getValue());
   }
-
-  // 2. POLL PARAM POT
-  // Currently unassigned, just debug logging
   if (_paramPot.update())
   {
-    LOG("Param Pot Changed: %d (Raw: %d)\n", _paramPot.getValue(), _paramPot.getRaw());
+    LOG("Param Pot: %d\n", _paramPot.getValue());
   }
 }
 
+// ----------------------------------------------------------------------
+// TRANSLATOR: ASCII -> COMMAND
+// ----------------------------------------------------------------------
 void UIManager::handleKeyPress(int key)
 {
-  LOG("Key Code Received: %d\n", key);
+  LOG("Key: %d\n", key);
 
-  // ----------------------------------------------------------------
-  // PRIORITY 1: EXCLUSIVE MODALS (The Trap)
-  // ----------------------------------------------------------------
   if (_currentMode == UI_MODE_BPM_INPUT)
   {
     _handleBPMInput(key);
     return;
   }
 
-  if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
-      _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
+  InputCommand cmd = CMD_NONE;
+
+  // 1. GLOBAL KEYS
+  if (key == ASCII_SPACE)
+    cmd = CMD_TRANSPORT_TOGGLE;
+  else if (key == ASCII_TAB)
+    cmd = CMD_MODE_TOGGLE;
+  else if (key == ASCII_CR || key == ASCII_LF)
+    cmd = CMD_SONG_MODE_TOGGLE;
+  else if (key == 't')
+    cmd = CMD_TEST_TOGGLE;
+  else if (key == 'b' || key == 'B')
+    cmd = CMD_BPM_ENTER;
+  else if (key == ASCII_BS || key == ASCII_DEL)
+    cmd = CMD_UNDO;
+
+  // 2. NAVIGATION
+  else if (key == '[')
+    cmd = CMD_PATTERN_PREV;
+  else if (key == ']')
+    cmd = CMD_PATTERN_NEXT;
+  else if (key == 218)
+    cmd = CMD_TRACK_PREV;
+  else if (key == 217)
+    cmd = CMD_TRACK_NEXT;
+  else if (key == 216)
+    cmd = CMD_PLAYLIST_PREV;
+  else if (key == 215)
+    cmd = CMD_PLAYLIST_NEXT;
+
+  // 3. EDITING / TRIGGERS
+  // Row 1
+  else if (key == '1')
+    cmd = CMD_TRIGGER_1;
+  else if (key == '2')
+    cmd = CMD_TRIGGER_2;
+  else if (key == '3')
+    cmd = CMD_TRIGGER_3;
+  else if (key == '4')
+    cmd = CMD_TRIGGER_4;
+  // Row 2
+  else if (key == 'q')
+    cmd = CMD_TRIGGER_5;
+  else if (key == 'w')
+    cmd = CMD_TRIGGER_6;
+  else if (key == 'e')
+    cmd = CMD_TRIGGER_7;
+  else if (key == 'r')
+    cmd = CMD_TRIGGER_8;
+  // Row 3
+  else if (key == 'a')
+    cmd = CMD_TRIGGER_9;
+  else if (key == 's')
+    cmd = CMD_TRIGGER_10;
+  else if (key == 'd')
+    cmd = CMD_TRIGGER_11;
+  else if (key == 'f')
+    cmd = CMD_TRIGGER_12;
+  // Row 4
+  else if (key == 'z')
+    cmd = CMD_TRIGGER_13;
+  else if (key == 'c')
+    cmd = CMD_TRIGGER_15;
+  else if (key == 'v')
+    cmd = CMD_TRIGGER_16;
+
+  // CONFLICT RESOLUTION: 'x'
+  // 'x' is Step 14 in Edit Mode, but 'Delete' in Song Mode.
+  else if (key == 'x')
   {
-    _handleConfirmClear(key);
-    return;
+    if (_model.getPlayMode() == MODE_SONG)
+      cmd = CMD_PLAYLIST_DELETE;
+    else
+      cmd = CMD_TRIGGER_14;
   }
 
-  // ----------------------------------------------------------------
-  // PRIORITY 2: GLOBAL / COMMON NAVIGATION
-  // ----------------------------------------------------------------
-  if (_handleGlobalKeys(key))
-  {
-    return;
-  }
+  // 4. PLAYLIST / MODAL SPECIFIC
+  else if (key == 'i' || key == 'I')
+    cmd = CMD_PLAYLIST_INSERT;
+  else if (key == '#')
+    cmd = CMD_CLEAR_PROMPT;
+  else if (key == 'y' || key == 'Y')
+    cmd = CMD_CONFIRM_YES;
+  else if (key == 'n' || key == 'N' || key == ASCII_ESC)
+    cmd = CMD_CONFIRM_NO;
 
-  // ----------------------------------------------------------------
-  // PRIORITY 3: CONTEXT SPECIFIC
-  // ----------------------------------------------------------------
-  // If in Song Mode, override standard behavior to edit playlist
-  if (_model.getPlayMode() == MODE_SONG)
+  if (cmd != CMD_NONE)
   {
-    _handlePlaylistEdit(key);
-  }
-  else
-  {
-    switch (_currentMode)
-    {
-    case UI_MODE_STEP_EDIT:
-      _handleStepEdit(key);
-      break;
-    case UI_MODE_PERFORM:
-      _handlePerformance(key);
-      break;
-    default:
-      break;
-    }
+    handleCommand(cmd);
   }
 }
 
-// Moves all the "Generic" logic out of the main function
-bool UIManager::_handleGlobalKeys(int key)
+// ----------------------------------------------------------------------
+// EXECUTOR: COMMAND -> ACTION
+// ----------------------------------------------------------------------
+void UIManager::handleCommand(InputCommand cmd)
 {
-  // Transport (Spacebar)
-  if (key == ASCII_SPACE)
+  // --- PRIORITY 1: HARDWARE TEST ---
+  if (cmd == CMD_TEST_TOGGLE)
   {
-    if (_model.isPlaying())
-      _model.stop();
-    else
-      _model.play();
-    return true;
-  }
-
-  // Hardware Test Toggle ('t')
-  if (key == 't')
-  {
+    // Direct Model Control (Restored)
     if (_model.getPlayMode() == MODE_HARDWARE_TEST)
     {
-      // Toggle OFF: Return to standard Pattern Loop and Stop
       _model.setPlayMode(MODE_PATTERN_LOOP);
       _model.stop();
     }
     else
     {
-      // Toggle ON: Enter Test Mode
       _model.setPlayMode(MODE_HARDWARE_TEST);
     }
-    return true;
+    return;
   }
 
-  // Mode Toggle (TAB)
-  if (key == ASCII_TAB)
+  // --- PRIORITY 2: MODAL HANDLING ---
+  if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
+      _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
+    if (cmd == CMD_CONFIRM_YES || cmd == CMD_SONG_MODE_TOGGLE)
+    {
+      if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
+        _model.clearTrack(_model.activeTrackID);
+      else
+        _model.clearCurrentPattern();
+      _currentMode = UI_MODE_STEP_EDIT;
+    }
+    else if (cmd == CMD_CONFIRM_NO || cmd == CMD_CLEAR_PROMPT)
+    {
+      if (cmd == CMD_CLEAR_PROMPT)
+      {
+        _currentMode = (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK) ? UI_MODE_CONFIRM_CLEAR_PATTERN : UI_MODE_CONFIRM_CLEAR_TRACK;
+      }
+      else
+      {
+        _currentMode = UI_MODE_STEP_EDIT;
+      }
+    }
+    return;
+  }
+
+  // --- PRIORITY 3: GLOBAL KEYS ---
+  switch (cmd)
+  {
+  case CMD_TRANSPORT_TOGGLE:
+    _model.isPlaying() ? _model.stop() : _model.play();
+    return;
+
+  case CMD_MODE_TOGGLE:
     _currentMode = (_currentMode == UI_MODE_STEP_EDIT) ? UI_MODE_PERFORM : UI_MODE_STEP_EDIT;
-    return true;
-  }
+    return;
 
-  // Pattern Navigation
-  // Only handle globally if NOT in Song Mode.
-  // In Song Mode, these keys edit the playlist slot value.
-  if (_model.getPlayMode() != MODE_SONG)
-  {
-    if (key == '[')
-    {
-      _model.prevPattern();
-      return true;
-    }
-    if (key == ']')
-    {
-      _model.nextPattern();
-      return true;
-    }
-  }
-
-  // Song Mode Toggle (Enter)
-  if (key == ASCII_CR || key == ASCII_LF)
+  case CMD_SONG_MODE_TOGGLE:
   {
     PlayMode pm = _model.getPlayMode();
     _model.setPlayMode(pm == MODE_PATTERN_LOOP ? MODE_SONG : MODE_PATTERN_LOOP);
-    return true;
+    return;
   }
 
-  // Undo (Backspace)
-  if (key == ASCII_BS || key == ASCII_DEL)
-  {
+  case CMD_UNDO:
     _model.undo();
-    return true;
-  }
+    return;
 
-  // Track Selection (Arrows)
-  if (key == 217)
-  { // Down
-    if (_model.activeTrackID < NUM_TRACKS - 1)
-      _model.activeTrackID++;
-    return true;
-  }
-  if (key == 218)
-  { // Up
-    if (_model.activeTrackID > 0)
-      _model.activeTrackID--;
-    return true;
-  }
-
-  // BPM Input Toggle ('b')
-  if (key == 'b' || key == 'B')
-  {
+  case CMD_BPM_ENTER:
     _currentMode = UI_MODE_BPM_INPUT;
     _inputPtr = 0;
     memset(_inputBuffer, 0, sizeof(_inputBuffer));
-    return true;
+    return;
+
+  default:
+    break;
   }
 
-  return false; // Key not used, pass it to Context Handler
-}
+  // --- PRIORITY 4: CONTEXT SPECIFIC ---
 
-// --- EDIT MODE: Keys toggle steps on the grid ---
-void UIManager::_handleStepEdit(int key)
-{
-  int targetStep = -1;
-
-  // Row 1 (Steps 1-4)
-  if (key == '1')
-    targetStep = 0;
-  if (key == '2')
-    targetStep = 1;
-  if (key == '3')
-    targetStep = 2;
-  if (key == '4')
-    targetStep = 3;
-  // Row 2 (Steps 5-8)
-  if (key == 'q')
-    targetStep = 4;
-  if (key == 'w')
-    targetStep = 5;
-  if (key == 'e')
-    targetStep = 6;
-  if (key == 'r')
-    targetStep = 7;
-  // Row 3 (Steps 9-12)
-  if (key == 'a')
-    targetStep = 8;
-  if (key == 's')
-    targetStep = 9;
-  if (key == 'd')
-    targetStep = 10;
-  if (key == 'f')
-    targetStep = 11;
-  // Row 4 (Steps 13-16)
-  if (key == 'z')
-    targetStep = 12;
-  if (key == 'x')
-    targetStep = 13;
-  if (key == 'c')
-    targetStep = 14;
-  if (key == 'v')
-    targetStep = 15;
-
-  // If valid key, toggle the bit in the Model
-  if (targetStep != -1)
+  // A. SONG MODE
+  if (_model.getPlayMode() == MODE_SONG)
   {
-    _model.createSnapshot(); // Auto-save for Undo
-    _model.toggleStep(_model.activeTrackID, targetStep);
-  }
-
-  // other editing commands
-  if (key == '#')
-  {
-    _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
-  }
-}
-
-// --- PERFORM MODE: Keys fire outputs immediately ---
-void UIManager::_handlePerformance(int key)
-{
-  int targetTrack = -1;
-
-  // Map Keys 1-4 to Tracks 1-4
-  if (key == '1')
-    targetTrack = 0;
-  if (key == '2')
-    targetTrack = 1;
-  if (key == '3')
-    targetTrack = 2;
-  if (key == '4')
-    targetTrack = 3;
-
-  if (targetTrack != -1)
-  {
-    uint16_t mask = (1 << targetTrack);
-    _driver.fireTriggers(mask);
-  }
-}
-
-// --- PLAYLIST MODE: Keys edit the Song structure ---
-void UIManager::_handlePlaylistEdit(int key)
-{
-  // 1. Navigation (Left/Right)
-  if (key == 216)
-  { // Left Arrow
-    if (_uiSelectedSlot > 0)
-      _uiSelectedSlot--;
-  }
-  if (key == 215)
-  { // Right Arrow
-    if (_uiSelectedSlot < _model.getPlaylistLength() - 1)
-      _uiSelectedSlot++;
-  }
-
-  // 2. Change Pattern Value ([ / ])
-  if (key == ']' || key == '[')
-  {
-    int currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
-    if (key == ']')
-      currentPat++;
-    if (key == '[')
-      currentPat--;
-
-    // Wrap around logic
-    if (currentPat < 0)
-      currentPat = MAX_PATTERNS - 1;
-    if (currentPat >= MAX_PATTERNS)
-      currentPat = 0;
-
-    _model.setPlaylistPattern(_uiSelectedSlot, currentPat);
-  }
-
-  // 3. Insert Slot (i)
-  if (key == 'i' || key == 'I')
-  {
-    // Insert a copy of the current pattern at the current position
-    int currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
-    _model.insertPlaylistSlot(_uiSelectedSlot + 1, currentPat);
-    // Move selection to new slot
-    _uiSelectedSlot++;
-  }
-
-  // 4. Delete Slot (x)
-  if (key == 'x' || key == 'X')
-  {
-    _model.deletePlaylistSlot(_uiSelectedSlot);
-    // Bounds check in case we deleted the last one
-    if (_uiSelectedSlot >= _model.getPlaylistLength())
+    switch (cmd)
     {
-      _uiSelectedSlot = _model.getPlaylistLength() - 1;
+    case CMD_PLAYLIST_PREV:
+      if (_uiSelectedSlot > 0)
+        _uiSelectedSlot--;
+      break;
+    case CMD_PLAYLIST_NEXT:
+      if (_uiSelectedSlot < _model.getPlaylistLength() - 1)
+        _uiSelectedSlot++;
+      break;
+    case CMD_PATTERN_NEXT:
+    {
+      int p = _model.getPlaylistPattern(_uiSelectedSlot);
+      p = (p + 1) % MAX_PATTERNS;
+      _model.setPlaylistPattern(_uiSelectedSlot, p);
+      break;
     }
+    case CMD_PATTERN_PREV:
+    {
+      int p = _model.getPlaylistPattern(_uiSelectedSlot);
+      p--;
+      if (p < 0)
+        p = MAX_PATTERNS - 1;
+      _model.setPlaylistPattern(_uiSelectedSlot, p);
+      break;
+    }
+    case CMD_PLAYLIST_INSERT:
+      _model.insertPlaylistSlot(_uiSelectedSlot + 1, _model.getPlaylistPattern(_uiSelectedSlot));
+      _uiSelectedSlot++;
+      break;
+    case CMD_PLAYLIST_DELETE:
+      _model.deletePlaylistSlot(_uiSelectedSlot);
+      if (_uiSelectedSlot >= _model.getPlaylistLength())
+        _uiSelectedSlot = _model.getPlaylistLength() - 1;
+      break;
+    default:
+      break;
+    }
+    return;
+  }
+
+  // B. PATTERN / PERFORM MODE
+  switch (cmd)
+  {
+  // Navigation
+  case CMD_PATTERN_PREV:
+    _model.prevPattern();
+    break;
+  case CMD_PATTERN_NEXT:
+    _model.nextPattern();
+    break;
+
+  case CMD_TRACK_NEXT:
+    if (_model.activeTrackID < NUM_TRACKS - 1)
+      _model.activeTrackID++;
+    break;
+  case CMD_TRACK_PREV:
+    if (_model.activeTrackID > 0)
+      _model.activeTrackID--;
+    break;
+
+  case CMD_CLEAR_PROMPT:
+    _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
+    break;
+
+  // Triggers (1-16)
+  case CMD_TRIGGER_1:
+    _handleTrigger(0);
+    break;
+  case CMD_TRIGGER_2:
+    _handleTrigger(1);
+    break;
+  case CMD_TRIGGER_3:
+    _handleTrigger(2);
+    break;
+  case CMD_TRIGGER_4:
+    _handleTrigger(3);
+    break;
+  case CMD_TRIGGER_5:
+    _handleTrigger(4);
+    break;
+  case CMD_TRIGGER_6:
+    _handleTrigger(5);
+    break;
+  case CMD_TRIGGER_7:
+    _handleTrigger(6);
+    break;
+  case CMD_TRIGGER_8:
+    _handleTrigger(7);
+    break;
+  case CMD_TRIGGER_9:
+    _handleTrigger(8);
+    break;
+  case CMD_TRIGGER_10:
+    _handleTrigger(9);
+    break;
+  case CMD_TRIGGER_11:
+    _handleTrigger(10);
+    break;
+  case CMD_TRIGGER_12:
+    _handleTrigger(11);
+    break;
+  case CMD_TRIGGER_13:
+    _handleTrigger(12);
+    break;
+  case CMD_TRIGGER_14:
+    _handleTrigger(13);
+    break;
+  case CMD_TRIGGER_15:
+    _handleTrigger(14);
+    break;
+  case CMD_TRIGGER_16:
+    _handleTrigger(15);
+    break;
+
+  default:
+    break;
+  }
+}
+
+void UIManager::_handleTrigger(int stepIndex)
+{
+  if (_currentMode == UI_MODE_PERFORM)
+  {
+    if (stepIndex < 4)
+    {
+      _driver.fireTriggers(1 << stepIndex);
+    }
+  }
+  else
+  {
+    _model.createSnapshot();
+    _model.toggleStep(_model.activeTrackID, stepIndex);
   }
 }
 
 void UIManager::_handleBPMInput(int key)
 {
-  // 1. Handle Numbers
   if (key >= '0' && key <= '9')
   {
     if (_inputPtr < 3)
@@ -348,8 +369,6 @@ void UIManager::_handleBPMInput(int key)
       _inputPtr++;
     }
   }
-
-  // 2. Handle Confirm (Enter)
   if (key == ASCII_CR || key == ASCII_LF)
   {
     if (_inputPtr > 0)
@@ -360,16 +379,12 @@ void UIManager::_handleBPMInput(int key)
         _model.setBPM(newBPM);
       }
     }
-    _currentMode = UI_MODE_STEP_EDIT; // Return to normal
+    _currentMode = UI_MODE_STEP_EDIT;
   }
-
-  // 3. Handle Cancel (ESC)
   if (key == ASCII_ESC)
   {
     _currentMode = UI_MODE_STEP_EDIT;
   }
-
-  // 4. Handle Backspace
   if ((key == ASCII_BS || key == ASCII_DEL) && _inputPtr > 0)
   {
     _inputPtr--;
@@ -380,34 +395,4 @@ void UIManager::_handleBPMInput(int key)
 const char *UIManager::getInputBuffer() const
 {
   return _inputBuffer;
-}
-
-void UIManager::_handleConfirmClear(int key)
-{
-  // '#' toggles between track and pattern clear
-  if (key == '#')
-  {
-    if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
-      _currentMode = UI_MODE_CONFIRM_CLEAR_PATTERN;
-    else
-      _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
-
-    return;
-  }
-
-  // Confirm ('y' or Enter)
-  if (key == 'y' || key == 'Y' || key == ASCII_CR || key == ASCII_LF)
-  {
-    if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK)
-      _model.clearTrack(_model.activeTrackID);
-    else
-      _model.clearCurrentPattern();
-    _currentMode = UI_MODE_STEP_EDIT;
-  }
-
-  // Cancel ('n', ESC, or 'c' again)
-  else if (key == 'n' || key == 'N' || key == ASCII_ESC || key == 'c')
-  {
-    _currentMode = UI_MODE_STEP_EDIT;
-  }
 }

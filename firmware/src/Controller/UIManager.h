@@ -1,9 +1,9 @@
 #pragma once
-#include <functional>
 #include "Config.h"
 #include "Model/SequencerModel.h"
 #include "Engine/OutputDriver.h"
 #include "AnalogInput.h"
+#include "InputCommands.h"
 
 enum InterfaceMode
 {
@@ -22,12 +22,13 @@ public:
   void init();
   void processInput();
 
-  // The Router
+  // The Translator: Maps Hardware Keys -> Commands
   void handleKeyPress(int key);
 
-  // Callback for Hardware Test
-  using Callback = std::function<void()>;
-  void setHardwareTestCallback(Callback cb) { _onTestRequested = cb; }
+  // The Executor: Performs actions based on Commands
+  void handleCommand(InputCommand cmd);
+
+  // (Callback system removed - logic is now direct)
 
   InterfaceMode getMode() const { return _currentMode; };
   const char *getInputBuffer() const;
@@ -38,7 +39,6 @@ private:
   OutputDriver &_driver;
 
   InterfaceMode _currentMode;
-  Callback _onTestRequested = nullptr;
 
   // ANALOG INPUTS
   AnalogInput _tempoPot;
@@ -49,10 +49,7 @@ private:
   int _inputPtr;
   int _uiSelectedSlot;
 
-  void _handleStepEdit(int key);
-  void _handlePerformance(int key);
+  // Internal Logic Handlers
+  void _handleTrigger(int stepIndex);
   void _handleBPMInput(int key);
-  bool _handleGlobalKeys(int key);
-  void _handlePlaylistEdit(int key);
-  void _handleConfirmClear(int key);
 };
