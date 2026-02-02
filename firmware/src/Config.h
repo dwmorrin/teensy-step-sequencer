@@ -13,7 +13,7 @@
 
 // --- HARDWARE MAPPING ---
 // Maps logical Track IDs (0-3) to physical Teensy Pins
-const int OUTPUT_MAP[NUM_TRACKS] = {2, 3, 4, 5};
+const int OUTPUT_MAP[NUM_TRACKS] = {25, 26, 27, 28};
 
 // --- INPUTS ---
 const int PIN_POT_TEMPO = 14;
