@@ -1,87 +1,119 @@
 #include "ClockEngine.h"
 
+ClockEngine *ClockEngine::_instance = nullptr;
+
 ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
     : _model(model), _driver(driver)
 {
-  _lastStepTime = 0;
+  _instance = this;
   _cachedBPM = 0;
-  _wasPlaying = false;
+  _stepCounter = 0;
+  _pulseCounter = 0;
+  _triggersActive = false;
+  _running = false;
 }
 
-void ClockEngine::run()
+void ClockEngine::init()
 {
-  // 1. TIMING OVERRIDE FOR DIAGNOSTICS
+  _timer.begin(onTick, 1000);
+}
+
+void ClockEngine::onTick()
+{
+  if (_instance)
+    _instance->_handleTick();
+}
+
+// NEW: Manual Trigger Injection
+void ClockEngine::manualTrigger(uint16_t mask)
+{
+  // Fire immediately
+  _driver.setTriggers(mask);
+
+  // Tell ISR to count 15ms and then kill it
+  // (Safe to set these volatiles from outside ISR for this simple flag logic)
+  _pulseCounter = 0;
+  _triggersActive = true;
+}
+
+void ClockEngine::_handleTick()
+{
+  // 1. HARDWARE TEST OVERRIDE
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    _stepInterval = 50; // Fast 50ms refresh for chaser
-
-    // Force "Playing" logic so steps advance
-    if (!_wasPlaying)
+    _stepCounter++;
+    if (_stepCounter >= 50)
     {
-      _wasPlaying = true;
-      _lastStepTime = millis();
-    }
-
-    unsigned long currentMillis = millis();
-    if (currentMillis - _lastStepTime >= _stepInterval)
-    {
-      _lastStepTime = currentMillis;
+      _stepCounter = 0;
       _model.advanceStep();
-      _handleStepFiring();
     }
-    return; // Skip standard BPM logic
+    return;
   }
 
-  // 2. STANDARD OPERATION
+  // 2. PULSE MANAGEMENT (Priority High)
+  // Run this BEFORE checking _running.
+  // This ensures manual triggers are turned off even if Sequencer is Stopped.
+  if (_triggersActive)
+  {
+    _pulseCounter++;
+    if (_pulseCounter >= PULSE_WIDTH_MS)
+    {
+      _driver.clearAllTriggers();
+      _triggersActive = false;
+    }
+  }
+
+  // 3. CHECK SEQUENCER STATE
+  bool isPlaying = _model.isPlaying();
+
+  if (isPlaying && !_running)
+  {
+    _running = true;
+    _stepCounter = _stepInterval; // Force immediate trigger
+  }
+  else if (!isPlaying && _running)
+  {
+    _running = false;
+    // Do not clear triggers here; let Pulse Management handle the tail
+  }
+
+  if (!_running)
+    return;
+
+  // 4. STEP ADVANCEMENT
+  _stepCounter++;
+  if (_stepCounter >= _stepInterval)
+  {
+    _stepCounter = 0;
+
+    _model.advanceStep();
+
+    int patID = _model.getPlayingPatternID();
+    int step = _model.getCurrentStep();
+    uint16_t mask = _model.getTriggersForStep(patID, step);
+
+    if (mask > 0)
+    {
+      _driver.setTriggers(mask);
+      _triggersActive = true;
+      _pulseCounter = 0;
+    }
+  }
+}
+
+void ClockEngine::update()
+{
   int targetBPM = _model.getBPM();
   if (targetBPM != _cachedBPM)
   {
     _cachedBPM = targetBPM;
-    // calculate ms per step
-    // (60,000 ms / BPM) / 4 steps per beat
-    _stepInterval = (60'000 / _cachedBPM) / 4;
-  }
-
-  bool isPlaying = _model.isPlaying();
-  if (!isPlaying)
-  {
-    _wasPlaying = false;
-    return;
-  }
-
-  if (isPlaying && !_wasPlaying)
-  {
-    _wasPlaying = true;
-    _handleStepFiring();
-    _lastStepTime = millis();
-    return;
-  }
-
-  unsigned long currentMillis = millis();
-  if (currentMillis - _lastStepTime >= _stepInterval)
-  {
-    _lastStepTime = currentMillis;
-    _model.advanceStep();
-    _handleStepFiring();
+    _calculateInterval(_cachedBPM);
   }
 }
 
-void ClockEngine::_handleStepFiring()
+void ClockEngine::_calculateInterval(int bpm)
 {
-  // OUTPUT OVERRIDE: Silence triggers during test
-  if (_model.getPlayMode() == MODE_HARDWARE_TEST)
-  {
-    return;
-  }
-
-  int patID = _model.getPlayingPatternID();
-  int step = _model.getCurrentStep();
-
-  uint16_t mask = _model.getTriggersForStep(patID, step);
-
-  // Only talk to hardware if there is something to say
-  if (mask > 0)
-  {
-    _driver.fireTriggers(mask);
-  }
+  if (bpm <= 0)
+    bpm = 120;
+  _stepInterval = (60000 / bpm) / 4;
 }

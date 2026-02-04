@@ -1,8 +1,8 @@
+#include "Debug.h"
 #include <Arduino.h>
 #include <USBHost_t36.h>
 
 // Core Components
-#include "Config.h"
 #include "Model/SequencerModel.h"
 #include "View/DisplayManager.h"
 #include "Controller/UIManager.h"
@@ -22,7 +22,7 @@ const int PIN_SR_LATCH = 10;
 SequencerModel model;
 OutputDriver driver;
 ClockEngine clockEngine(model, driver);
-UIManager ui(model, driver);
+UIManager ui(model, driver, clockEngine);
 
 // DisplayManager now receives the Latch Pin for the LEDs
 DisplayManager display(model, ui, PIN_SR_LATCH);
@@ -44,6 +44,8 @@ void setup()
   // 2. Init USB
   myusb.begin();
   keyboard1.attachPress(globalKeyPress);
+
+  clockEngine.init();
 }
 
 // --- GLOBAL BRIDGE ---
@@ -60,7 +62,7 @@ void loop()
   myusb.Task();
 
   // 2. TIMING ENGINE
-  clockEngine.run();
+  clockEngine.update();
 
   // 3. INTERFACE
   ui.processInput();

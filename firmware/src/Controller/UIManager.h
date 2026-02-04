@@ -2,6 +2,7 @@
 #include "Config.h"
 #include "Model/SequencerModel.h"
 #include "Engine/OutputDriver.h"
+#include "Engine/ClockEngine.h"
 #include "AnalogInput.h"
 #include "InputCommands.h"
 #include "KeyMatrix.h" // Added
@@ -18,7 +19,7 @@ enum InterfaceMode
 class UIManager
 {
 public:
-  UIManager(SequencerModel &model, OutputDriver &driver);
+  UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &clock);
 
   void init();
   void processInput();
@@ -33,6 +34,7 @@ public:
 private:
   SequencerModel &_model;
   OutputDriver &_driver;
+  ClockEngine &_clock;
 
   InterfaceMode _currentMode;
 

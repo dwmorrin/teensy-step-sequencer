@@ -10,9 +10,10 @@
 #define ASCII_SPACE 32
 #define ASCII_DEL 127
 
-UIManager::UIManager(SequencerModel &model, OutputDriver &driver)
+UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &clock)
     : _model(model),
       _driver(driver),
+      _clock(clock),
       _tempoPot(PIN_POT_TEMPO, POT_INVERT_POLARITY ? 300 : 30, POT_INVERT_POLARITY ? 30 : 300, 4),
       _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 100 : 0, POT_INVERT_POLARITY ? 0 : 100, 8)
 {
@@ -432,7 +433,7 @@ void UIManager::_handleTrigger(int stepIndex)
   {
     if (stepIndex < 4)
     {
-      _driver.fireTriggers(1 << stepIndex);
+      _clock.manualTrigger(1 << stepIndex);
     }
   }
   else
