@@ -5,7 +5,7 @@
 #include "Engine/ClockEngine.h"
 #include "AnalogInput.h"
 #include "InputCommands.h"
-#include "KeyMatrix.h" // Added
+#include "KeyMatrix.h"
 
 enum InterfaceMode
 {
@@ -31,6 +31,9 @@ public:
   const char *getInputBuffer() const;
   int getSelectedSlot() const { return _uiSelectedSlot; }
 
+  // Getter for View to show which bank is active
+  int getSongModeBankOffset() const { return _songModeBankOffset; }
+
 private:
   SequencerModel &_model;
   OutputDriver &_driver;
@@ -41,12 +44,13 @@ private:
   // INPUTS
   AnalogInput _tempoPot;
   AnalogInput _paramPot;
-  KeyMatrix _keyMatrix; // Added
+  KeyMatrix _keyMatrix;
 
   // BPM Input State
   char _inputBuffer[4];
   int _inputPtr;
   int _uiSelectedSlot;
+  int _songModeBankOffset; // 0, 16, 32, 48
 
   // Internal Logic Handlers
   void _handleTrigger(int stepIndex);

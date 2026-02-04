@@ -15,10 +15,12 @@ UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &c
       _driver(driver),
       _clock(clock),
       _tempoPot(PIN_POT_TEMPO, POT_INVERT_POLARITY ? 300 : 30, POT_INVERT_POLARITY ? 30 : 300, 4),
-      _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 100 : 0, POT_INVERT_POLARITY ? 0 : 100, 8)
+      // Param Pot mapped 0-63 for Pattern Selection in Song Mode
+      _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 63 : 0, POT_INVERT_POLARITY ? 0 : 63, 2)
 {
   _currentMode = UI_MODE_STEP_EDIT;
   _uiSelectedSlot = 0;
+  _songModeBankOffset = 0;
 }
 
 void UIManager::init()
@@ -33,9 +35,25 @@ void UIManager::processInput()
   {
     _model.setBPM(_tempoPot.getValue());
   }
+
+  // Param Pot: In Song Mode, it scrolls the Pattern ID for the selected slot
   if (_paramPot.update())
   {
-    LOG("Param Pot: %d\n", _paramPot.getValue());
+    if (_model.getPlayMode() == MODE_SONG)
+    {
+      int pID = _paramPot.getValue();
+      // Safety clamp
+      if (pID < 0)
+        pID = 0;
+      if (pID >= MAX_PATTERNS)
+        pID = MAX_PATTERNS - 1;
+
+      _model.setPlaylistPattern(_uiSelectedSlot, pID);
+    }
+    else
+    {
+      LOG("Param Pot: %d\n", _paramPot.getValue());
+    }
   }
 
   // 2. MATRIX SCAN
@@ -59,13 +77,33 @@ void UIManager::processInput()
 // ----------------------------------------------------------------------
 InputCommand UIManager::_mapMatrixToCommand(int id)
 {
-  // ROW 1 (Physical): Steps 1-16
+  bool shift = _keyMatrix.isShiftHeld();
+
+  // ROW 1 & 2 (Physical): Steps 1-16
   if (id >= 1 && id <= 16)
   {
+    // Shift + Steps 1-4 = Bank Select
+    if (shift && id <= 4)
+    {
+      switch (id)
+      {
+      case 1:
+        return CMD_PLAYLIST_BANK_1;
+      case 2:
+        return CMD_PLAYLIST_BANK_2;
+      case 3:
+        return CMD_PLAYLIST_BANK_3;
+      case 4:
+        return CMD_PLAYLIST_BANK_4;
+      default:
+        return CMD_NONE;
+      }
+    }
+    // Normal Press
     return (InputCommand)(CMD_TRIGGER_1 + (id - 1));
   }
 
-  // ROW 2 (Physical): Function Keys 17-32
+  // FUNCTION KEYS
   switch (id)
   {
   case 17:
@@ -77,23 +115,44 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
   case 20:
     return CMD_TRACK_4; // D
 
+  case 24:
+    return CMD_UNDO; // Switch H (24)
+
   case 25:
-    return CMD_CLEAR_PROMPT; // Clear
+    // Context-sensitive CLEAR: Delete Slot in Song Mode
+    if (_model.getPlayMode() == MODE_SONG)
+      return CMD_PLAYLIST_DELETE;
+    return CMD_CLEAR_PROMPT;
+
   case 26:
     return CMD_TRACK_PREV; // Up
   case 27:
     return CMD_TRACK_NEXT; // Down
-  case 28:
-    return CMD_PATTERN_PREV; // Left
-  case 29:
-    return CMD_PATTERN_NEXT; // Right
+
+  case 28: // LEFT
+    if (shift && _model.getPlayMode() == MODE_SONG)
+      return CMD_PLAYLIST_INSERT_PREV;
+    if (_model.getPlayMode() == MODE_SONG)
+      return CMD_PLAYLIST_PREV;
+    return CMD_PATTERN_PREV;
+
+  case 29: // RIGHT
+    if (shift && _model.getPlayMode() == MODE_SONG)
+      return CMD_PLAYLIST_INSERT_NEXT;
+    if (_model.getPlayMode() == MODE_SONG)
+      return CMD_PLAYLIST_NEXT;
+    return CMD_PATTERN_NEXT;
+
   case 30:
     return CMD_TRANSPORT_TOGGLE; // Play
-  case 31:
-    return CMD_MODE_TOGGLE; // Mode
+
+  case 31: // MODE
+    if (shift)
+      return CMD_SONG_MODE_TOGGLE;
+    return CMD_MODE_TOGGLE;
 
   case 32:
-    return CMD_NONE; // SHIFT
+    return CMD_NONE; // SHIFT handled via isShiftHeld()
 
   default:
     return CMD_NONE;
@@ -127,6 +186,8 @@ void UIManager::handleKeyPress(int key)
   else if (key == 'b' || key == 'B')
     cmd = CMD_BPM_ENTER;
   else if (key == ASCII_BS || key == ASCII_DEL)
+    cmd = CMD_UNDO;
+  else if (key == 'z') // Standard Undo shortcut
     cmd = CMD_UNDO;
 
   // 2. NAVIGATION
@@ -162,7 +223,7 @@ void UIManager::handleKeyPress(int key)
     cmd = CMD_TRIGGER_11;
   else if (key == 'f')
     cmd = CMD_TRIGGER_12;
-  else if (key == 'z')
+  else if (key == 'z') // Note: 'z' is mapped to Undo above for USB users, check conflicts
     cmd = CMD_TRIGGER_13;
   else if (key == 'c')
     cmd = CMD_TRIGGER_15;
@@ -179,7 +240,7 @@ void UIManager::handleKeyPress(int key)
 
   // 4. PLAYLIST / MODAL
   else if (key == 'i' || key == 'I')
-    cmd = CMD_PLAYLIST_INSERT;
+    cmd = CMD_PLAYLIST_INSERT_PREV; // Default legacy 'i' to insert before
   else if (key == '#')
     cmd = CMD_CLEAR_PROMPT;
   else if (key == 'y' || key == 'Y')
@@ -217,6 +278,7 @@ void UIManager::handleCommand(InputCommand cmd)
   if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
       _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
+    // Note: USB Enter sends CMD_SONG_MODE_TOGGLE, which acts as YES here.
     bool isYes = (cmd == CMD_CONFIRM_YES || cmd == CMD_SONG_MODE_TOGGLE);
     if (cmd >= CMD_TRIGGER_1 && cmd <= CMD_TRIGGER_4)
       isYes = true;
@@ -262,6 +324,9 @@ void UIManager::handleCommand(InputCommand cmd)
   {
     PlayMode pm = _model.getPlayMode();
     _model.setPlayMode(pm == MODE_PATTERN_LOOP ? MODE_SONG : MODE_PATTERN_LOOP);
+    // Reset bank offset when entering song mode
+    if (_model.getPlayMode() == MODE_SONG)
+      _songModeBankOffset = 0;
     return;
   }
 
@@ -294,6 +359,93 @@ void UIManager::handleCommand(InputCommand cmd)
       if (_uiSelectedSlot < _model.getPlaylistLength() - 1)
         _uiSelectedSlot++;
       break;
+
+    // --- SONG EDITING COMMANDS ---
+    case CMD_PLAYLIST_INSERT_PREV:
+    {
+      uint8_t currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
+      _model.insertPlaylistSlot(_uiSelectedSlot, currentPat); // Insert at current
+      // Cursor stays at current index (which is the new slot)
+      break;
+    }
+    case CMD_PLAYLIST_INSERT_NEXT:
+    {
+      uint8_t currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
+      _model.insertPlaylistSlot(_uiSelectedSlot + 1, currentPat);
+      _uiSelectedSlot++; // Move to the new slot
+      break;
+    }
+    case CMD_PLAYLIST_DELETE:
+      _model.deletePlaylistSlot(_uiSelectedSlot);
+      if (_uiSelectedSlot >= _model.getPlaylistLength())
+        _uiSelectedSlot = max(0, _model.getPlaylistLength() - 1);
+      break;
+
+    // --- BANK SELECTION ---
+    case CMD_PLAYLIST_BANK_1:
+      _songModeBankOffset = 0;
+      break;
+    case CMD_PLAYLIST_BANK_2:
+      _songModeBankOffset = 16;
+      break;
+    case CMD_PLAYLIST_BANK_3:
+      _songModeBankOffset = 32;
+      break;
+    case CMD_PLAYLIST_BANK_4:
+      _songModeBankOffset = 48;
+      break;
+
+    // --- PATTERN SELECTION (1-16 + Offset) ---
+    case CMD_TRIGGER_1:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 0);
+      break;
+    case CMD_TRIGGER_2:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 1);
+      break;
+    case CMD_TRIGGER_3:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 2);
+      break;
+    case CMD_TRIGGER_4:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 3);
+      break;
+    case CMD_TRIGGER_5:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 4);
+      break;
+    case CMD_TRIGGER_6:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 5);
+      break;
+    case CMD_TRIGGER_7:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 6);
+      break;
+    case CMD_TRIGGER_8:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 7);
+      break;
+    case CMD_TRIGGER_9:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 8);
+      break;
+    case CMD_TRIGGER_10:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 9);
+      break;
+    case CMD_TRIGGER_11:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 10);
+      break;
+    case CMD_TRIGGER_12:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 11);
+      break;
+    case CMD_TRIGGER_13:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 12);
+      break;
+    case CMD_TRIGGER_14:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 13);
+      break;
+    case CMD_TRIGGER_15:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 14);
+      break;
+    case CMD_TRIGGER_16:
+      _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 15);
+      break;
+
+    // Legacy support for Pattern Prev/Next via Arrows if not caught by mapMatrix
     case CMD_PATTERN_NEXT:
     {
       int p = _model.getPlaylistPattern(_uiSelectedSlot);
@@ -310,15 +462,8 @@ void UIManager::handleCommand(InputCommand cmd)
       _model.setPlaylistPattern(_uiSelectedSlot, p);
       break;
     }
-    case CMD_PLAYLIST_INSERT:
-      _model.insertPlaylistSlot(_uiSelectedSlot + 1, _model.getPlaylistPattern(_uiSelectedSlot));
-      _uiSelectedSlot++;
-      break;
-    case CMD_PLAYLIST_DELETE:
-      _model.deletePlaylistSlot(_uiSelectedSlot);
-      if (_uiSelectedSlot >= _model.getPlaylistLength())
-        _uiSelectedSlot = _model.getPlaylistLength() - 1;
-      break;
+
+    // Direct Track selection (Function keys 17-20)
     case CMD_TRACK_1:
       _model.activeTrackID = 0;
       break;
@@ -331,6 +476,7 @@ void UIManager::handleCommand(InputCommand cmd)
     case CMD_TRACK_4:
       _model.activeTrackID = 3;
       break;
+
     default:
       break;
     }

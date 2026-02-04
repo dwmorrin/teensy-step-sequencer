@@ -37,25 +37,54 @@ void DisplayManager::update()
   // CASE 1: HARDWARE DIAGNOSTIC (Chaser Animation)
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    // Light up ONLY the current step (driven by fast clock)
     _leds.set(_model.getCurrentStep(), true);
   }
-  // CASE 2: NORMAL OPERATION
-  else if (_ui.getMode() == UI_MODE_STEP_EDIT || _ui.getMode() == UI_MODE_PERFORM)
+
+  // CASE 2: SONG MODE (New Logic)
+  else if (_model.getPlayMode() == MODE_SONG)
+  {
+    if (_model.isPlaying())
+    {
+      // A. PLAYING: Show the Rhythm Chaser (Current Step)
+      _leds.set(_model.getCurrentStep(), true);
+    }
+    else
+    {
+      // B. STOPPED: Show the Pattern ID for the Selected Slot
+      // This allows users to see "Pattern 5 is in this slot"
+      int patID = _model.getPlaylistPattern(_ui.getSelectedSlot());
+      int bankOffset = _ui.getSongModeBankOffset();
+
+      // Map Pattern ID to 1-16 range based on current Bank
+      int ledIndex = patID - bankOffset;
+
+      if (ledIndex >= 0 && ledIndex < 16)
+      {
+        _leds.set(ledIndex, true);
+      }
+    }
+  }
+
+  // CASE 3: PATTERN LOOP / STEP EDIT (Legacy Logic)
+  else
   {
     int activeTrack = _model.activeTrackID;
     int viewPattern = _model.currentViewPatternID;
 
+    // Show Triggers for the active track
     for (int i = 0; i < NUM_STEPS; i++)
     {
       uint16_t mask = _model.getTriggersForStep(viewPattern, i);
-      // Check if the bit for the active track is set
       if ((mask >> activeTrack) & 1)
       {
         _leds.set(i, true);
       }
     }
+
+    // Optional: Overlay a blinking cursor on the LEDs if playing?
+    // For now, let's keep it simple (Triggers only).
   }
+
   _leds.show();
 
   // --- UPDATE OLED ---
@@ -64,7 +93,6 @@ void DisplayManager::update()
   // CASE 1: HARDWARE DIAGNOSTIC
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    // Run the Electrical Test ONCE per session
     if (!_hasRunDiagnostic)
     {
       _lastDiagnosticResult = _leds.selfTest();
@@ -79,13 +107,11 @@ void DisplayManager::update()
   }
   else
   {
-    // Reset diagnostic flag when we leave the mode
     _hasRunDiagnostic = false;
 
     _drawHeader();
 
     // CONTEXT SWITCHING:
-    // If in Song Mode, show the Playlist Editor
     if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK ||
         _ui.getMode() == UI_MODE_CONFIRM_CLEAR_PATTERN)
     {
@@ -97,7 +123,6 @@ void DisplayManager::update()
       _u8g2.setFont(u8g2_font_6x10_tf);
       _u8g2.setCursor(12, 35);
 
-      // Dynamic Title
       if (_ui.getMode() == UI_MODE_CONFIRM_CLEAR_TRACK)
       {
         _u8g2.print("CLR TRACK?");
@@ -107,8 +132,7 @@ void DisplayManager::update()
         _u8g2.print("CLR PATTERN?");
       }
 
-      // Input Guidance (Step Buttons)
-      _u8g2.setFont(u8g2_font_profont10_mr); // Smaller font for instructions
+      _u8g2.setFont(u8g2_font_profont10_mr);
       _u8g2.setCursor(12, 48);
       _u8g2.print("YES: 1-4 | NO: 13-16");
 
@@ -132,24 +156,19 @@ void DisplayManager::update()
 
 void DisplayManager::_drawHeader()
 {
-  _u8g2.setFont(u8g2_font_6x10_tf); // Ensure font is set
+  _u8g2.setFont(u8g2_font_6x10_tf);
 
-  // --- MODE A: BPM INPUT (Modal Overlay) ---
   if (_ui.getMode() == UI_MODE_BPM_INPUT)
   {
     _u8g2.setCursor(0, 8);
     _u8g2.print("SET BPM: > ");
     _u8g2.print(_ui.getInputBuffer());
 
-    // Blink cursor effect
     if ((millis() / 500) % 2 == 0)
       _u8g2.print("_");
-    return; // Don't draw the rest of the header
+    return;
   }
 
-  // --- MODE B: STANDARD HEADER ---
-
-  // Play State
   if (_model.isPlaying())
   {
     _u8g2.drawTriangle(0, 0, 0, 8, 8, 4);
@@ -159,14 +178,12 @@ void DisplayManager::_drawHeader()
     _u8g2.drawBox(0, 0, 8, 9);
   }
 
-  // Pattern ID
   _u8g2.setCursor(20, 8);
   _u8g2.print("PAT:");
   if (_model.currentViewPatternID < 9)
     _u8g2.print("0");
   _u8g2.print(_model.currentViewPatternID + 1);
 
-  // Song Mode Indicator
   _u8g2.setCursor(65, 8);
   if (_model.getPlayMode() == MODE_SONG)
   {
@@ -177,7 +194,6 @@ void DisplayManager::_drawHeader()
     _u8g2.print("LOOP");
   }
 
-  // Current BPM Display
   _u8g2.setCursor(100, 8);
   _u8g2.print(_model.getBPM());
 }
@@ -191,44 +207,37 @@ void DisplayManager::_drawGrid()
   int viewPattern = _model.currentViewPatternID;
   int playingPattern = _model.getPlayingPatternID();
 
-  // Iterate Tracks
   for (int track = 0; track < NUM_TRACKS; track++)
   {
-    // Draw Track Indicator
     if (track == _model.activeTrackID)
     {
       int arrowY = startY + (track * trackHeight) + 8;
       _u8g2.drawStr(122, arrowY, _ui.getMode() == UI_MODE_PERFORM ? TRACK_PERFORM_STR : TRACK_EDIT_STR);
     }
 
-    // Iterate Steps
     for (int step = 0; step < NUM_STEPS; step++)
     {
       int x = step * stepWidth;
       int y = startY + (track * trackHeight);
 
-      // DATA RETRIEVAL
       uint16_t mask = _model.getTriggersForStep(viewPattern, step);
       bool isNoteOn = (mask >> track) & 1;
 
       if (isNoteOn)
       {
-        _u8g2.drawBox(x + 1, y, 6, 8); // Filled box
+        _u8g2.drawBox(x + 1, y, 6, 8);
       }
       else
       {
-        _u8g2.drawPixel(x + 3, y + 4); // Tiny dot
+        _u8g2.drawPixel(x + 3, y + 4);
       }
     }
   }
 
-  // PLAYHEAD CURSOR
-  // Only draw if we are looking at the pattern that is playing.
+  // PLAYHEAD CURSOR (Grid View)
   if (_model.isPlaying() && (viewPattern == playingPattern))
   {
     int cursorX = _model.getCurrentStep() * stepWidth;
-
-    // XOR Mode for cursor
     _u8g2.setDrawColor(2);
     _u8g2.drawBox(cursorX, startY - 2, stepWidth - 1, (NUM_TRACKS * trackHeight) + 4);
     _u8g2.setDrawColor(1);
@@ -237,62 +246,51 @@ void DisplayManager::_drawGrid()
 
 void DisplayManager::_drawPlaylist()
 {
-  // Visual Settings
   int slotWidth = 24;
   int startX = 5;
   int startY = 25;
 
   _u8g2.setFont(u8g2_font_6x10_tf);
 
-  // CAMERA LOGIC:
-  // We can't show all 128 slots. We show a window of ~5 slots.
-  // The window centers around the user's selected slot.
   int selectedSlot = _ui.getSelectedSlot();
   int startView = selectedSlot - 2;
   if (startView < 0)
     startView = 0;
 
-  // Draw 5 Slots
   for (int i = 0; i < 5; i++)
   {
     int currentSlotIndex = startView + i;
 
-    // Stop if we run off the end of the actual song
     if (currentSlotIndex >= _model.getPlaylistLength())
       break;
 
     int x = startX + (i * slotWidth);
 
-    // Draw Labels
     _u8g2.setCursor(x, startY);
     _u8g2.print("S");
     if (currentSlotIndex < 9)
-      _u8g2.print("0");                // Pad single digits
-    _u8g2.print(currentSlotIndex + 1); // Show human index (1-based)
+      _u8g2.print("0");
+    _u8g2.print(currentSlotIndex + 1);
 
-    // Draw Pattern Value
     _u8g2.setCursor(x, startY + 12);
     int patID = _model.getPlaylistPattern(currentSlotIndex);
     if (patID < 9)
       _u8g2.print("0");
     _u8g2.print(patID + 1);
 
-    // Draw Selection Box (The Cursor)
     if (currentSlotIndex == selectedSlot)
     {
       _u8g2.drawFrame(x - 2, startY - 9, slotWidth - 2, 26);
     }
 
-    // Draw Playhead (Where the audio is)
-    // Only if we are playing and this slot is the active one
     if (_model.isPlaying() && currentSlotIndex == _model.getPlaylistCursor())
     {
       _u8g2.drawStr(x + 5, startY + 22, "^");
     }
   }
 
-  // Helper Text
+  // Helper Text (Updated)
   _u8g2.setCursor(0, 60);
   _u8g2.setFont(u8g2_font_profont10_mr);
-  _u8g2.print("[i]nsert  [x]delete");
+  _u8g2.print("Shft+<>:Ins | Clr:Del");
 }
