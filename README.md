@@ -4,6 +4,9 @@ This project implements a hardware-based step sequencer using the Teensy 4.1 mic
 
 ## Gallery
 
+### Version 1 first build
+![Version 1 first build](docs/images/build-v1-running.jpg)
+
 ### Prototype
 
 ![Breadboard Setup](docs/images/prototype-breadboard-setup.jpg)
