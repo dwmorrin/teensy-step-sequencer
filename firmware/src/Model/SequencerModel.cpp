@@ -1,5 +1,10 @@
 #include "SequencerModel.h"
 
+// CONSTANTS FOR 96 PPQN
+// 96 pulses per quarter note
+// 16th note = 1/4 of a quarter = 24 ticks
+#define TICKS_PER_STEP 24
+
 SequencerModel::SequencerModel()
 {
   _bpm = 120;
@@ -9,8 +14,9 @@ SequencerModel::SequencerModel()
 
   _playing = false;
   _currentStep = 0;
-  _playMode = MODE_PATTERN_LOOP;
+  _currentTick = 0; // Init 96 PPQN counter
 
+  _playMode = MODE_PATTERN_LOOP;
   currentViewPatternID = 0;
   activeTrackID = 0;
 
@@ -27,6 +33,7 @@ SequencerModel::SequencerModel()
   {
     for (int t = 0; t < NUM_TRACKS; t++)
     {
+      _patternPool[p].trackSwing[t] = 0; // Default: 0 (Straight / 50%)
       for (int s = 0; s < NUM_STEPS; s++)
       {
         _patternPool[p].steps[t][s] = false;
@@ -64,6 +71,7 @@ void SequencerModel::stop()
 {
   _playing = false;
   _currentStep = 0;
+  _currentTick = 0;
   _playlistCursor = 0;
   // On Stop, sync everything
   _playingPatternID = currentViewPatternID;
@@ -122,6 +130,32 @@ void SequencerModel::applyPendingPattern()
 void SequencerModel::setPlayMode(PlayMode mode)
 {
   _playMode = mode;
+}
+
+// -------------------------------------------------------------------------
+// GROOVE / SWING (NEW)
+// -------------------------------------------------------------------------
+void SequencerModel::setTrackSwing(int trackID, uint8_t swingValue)
+{
+  if (trackID < 0 || trackID >= NUM_TRACKS)
+    return;
+  if (swingValue > 100)
+    swingValue = 100; // Cap at 100% (though logic maps it to 75% delay)
+  _patternPool[currentViewPatternID].trackSwing[trackID] = swingValue;
+}
+
+uint8_t SequencerModel::getTrackSwing(int trackID) const
+{
+  if (trackID < 0 || trackID >= NUM_TRACKS)
+    return 0;
+  return _patternPool[currentViewPatternID].trackSwing[trackID];
+}
+
+uint8_t SequencerModel::getPlayingTrackSwing(int trackID) const
+{
+  if (trackID < 0 || trackID >= NUM_TRACKS)
+    return 0;
+  return _patternPool[_playingPatternID].trackSwing[trackID];
 }
 
 // -------------------------------------------------------------------------
@@ -244,24 +278,34 @@ uint16_t SequencerModel::getTriggersForStep(int patternID, int step)
   return mask;
 }
 
-bool SequencerModel::advanceStep()
+// NEW: 96 PPQN Advance Logic
+// Returns TRUE if we just finished a Bar
+bool SequencerModel::advanceTick()
 {
-  _currentStep++;
+  _currentTick++;
 
-  if (_currentStep >= NUM_STEPS)
+  // Check if we completed a Step (24 ticks)
+  if (_currentTick >= TICKS_PER_STEP)
   {
-    _currentStep = 0;
+    _currentTick = 0;
+    _currentStep++;
 
-    if (_playMode == MODE_SONG)
+    // Check if we completed a Bar (16 steps)
+    if (_currentStep >= NUM_STEPS)
     {
-      _playlistCursor++;
-      if (_playlistCursor >= _playlistLength)
-      {
-        _playlistCursor = 0;
-      }
-    }
-    return true;
-  }
+      _currentStep = 0;
 
+      // Handle Song Mode Iteration
+      if (_playMode == MODE_SONG)
+      {
+        _playlistCursor++;
+        if (_playlistCursor >= _playlistLength)
+        {
+          _playlistCursor = 0;
+        }
+      }
+      return true; // Wrapped Bar
+    }
+  }
   return false;
 }

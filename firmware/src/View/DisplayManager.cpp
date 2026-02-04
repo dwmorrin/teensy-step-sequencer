@@ -97,7 +97,7 @@ void DisplayManager::update()
       _u8g2.setCursor(12, 48);
       _u8g2.print("YES: 1-4 | NO: 13-16");
     }
-    // NEW: QUANTIZE MENU
+    // QUANTIZE MENU
     else if (_ui.getMode() == UI_MODE_QUANTIZE_MENU)
     {
       _u8g2.setDrawColor(0);
@@ -137,6 +137,29 @@ void DisplayManager::update()
         break;
       }
       _u8g2.drawStr(x - 6, y, ">");
+    }
+    // SWING OVERLAY (Transient: Shows for 1.5 seconds)
+    else if (millis() - _ui.getLastSwingChangeTime() < 1500)
+    {
+      // Draw Box
+      _u8g2.setDrawColor(0);
+      _u8g2.drawBox(20, 20, 88, 30);
+      _u8g2.setDrawColor(1);
+      _u8g2.drawFrame(20, 20, 88, 30);
+
+      _u8g2.setFont(u8g2_font_6x10_tf);
+
+      // Line 1: Track Name
+      _u8g2.setCursor(25, 35);
+      _u8g2.print("TRK ");
+      // Convert Track ID 0-3 to A-D
+      _u8g2.print((char)('A' + _model.activeTrackID));
+      _u8g2.print(" SWING");
+
+      // Line 2: Value
+      _u8g2.setCursor(50, 47);
+      _u8g2.print(_ui.getLastSwingValue());
+      _u8g2.print("%");
     }
     else if (_model.getPlayMode() == MODE_SONG)
     {
@@ -208,36 +231,68 @@ void DisplayManager::_drawHeader()
   _u8g2.print(_model.getBPM());
 }
 
-// ... (Rest of file: _drawGrid and _drawPlaylist remain unchanged) ...
 void DisplayManager::_drawGrid()
 {
   int stepWidth = 7;
   int trackHeight = 12;
   int startY = 16;
+
   int viewPattern = _model.currentViewPatternID;
-  int playingPattern = _model.getPlayingPatternID(); // NOTE: Used to only show cursor if viewing playing pattern
+  int playingPattern = _model.getPlayingPatternID();
 
   for (int track = 0; track < NUM_TRACKS; track++)
   {
+    uint8_t swing = _model.getTrackSwing(track);
+
     if (track == _model.activeTrackID)
     {
       int arrowY = startY + (track * trackHeight) + 8;
       _u8g2.drawStr(122, arrowY, _ui.getMode() == UI_MODE_PERFORM ? TRACK_PERFORM_STR : TRACK_EDIT_STR);
     }
+
     for (int step = 0; step < NUM_STEPS; step++)
     {
       int x = step * stepWidth;
       int y = startY + (track * trackHeight);
+
       uint16_t mask = _model.getTriggersForStep(viewPattern, step);
-      if ((mask >> track) & 1)
-        _u8g2.drawBox(x + 1, y, 6, 8);
+      bool isNoteOn = (mask >> track) & 1;
+
+      // --- VISUAL SWING LOGIC ---
+      int boxX = x + 1;
+      int boxW = 6;
+
+      // If this is an Off-Beat (Odd Index) and Swing is applied (>10%)
+      if ((step % 2 != 0) && (swing > 10))
+      {
+        // "Delay" the visual representation
+        // Shift right by 2 pixels, shrink width by 2 pixels
+        boxX += 2;
+        boxW -= 2;
+      }
+      // --------------------------
+
+      if (isNoteOn)
+      {
+        _u8g2.drawBox(boxX, y, boxW, 8);
+      }
       else
-        _u8g2.drawPixel(x + 3, y + 4);
+      {
+        // Move the empty dot too, to keep the grid aligned visual
+        int dotX = x + 3;
+        if ((step % 2 != 0) && (swing > 10))
+          dotX += 2;
+
+        _u8g2.drawPixel(dotX, y + 4);
+      }
     }
   }
+
   if (_model.isPlaying() && (viewPattern == playingPattern))
   {
     int cursorX = _model.getCurrentStep() * stepWidth;
+    // Note: We don't swing the cursor visual because the cursor represents "Grid Time",
+    // whereas the note represents "Trigger Time". It's actually helpful to see the cursor hit "early" vs the block.
     _u8g2.setDrawColor(2);
     _u8g2.drawBox(cursorX, startY - 2, stepWidth - 1, (NUM_TRACKS * trackHeight) + 4);
     _u8g2.setDrawColor(1);

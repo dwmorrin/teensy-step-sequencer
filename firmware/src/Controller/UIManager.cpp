@@ -20,6 +20,8 @@ UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &c
   _currentMode = UI_MODE_STEP_EDIT;
   _uiSelectedSlot = 0;
   _songModeBankOffset = 0;
+  _lastSwingChangeTime = 0;
+  _lastSwingValue = 0;
 }
 
 void UIManager::init()
@@ -37,15 +39,37 @@ void UIManager::processInput()
 
   if (_paramPot.update())
   {
-    if (_model.getPlayMode() == MODE_SONG)
+    bool shift = _keyMatrix.isShiftHeld();
+
+    // CASE A: SWING CONTROL (Shift + Param)
+    // This works in any mode.
+    if (shift)
+    {
+      // Map Pot (0-63) to Swing % (0-100)
+      int swingVal = map(_paramPot.getValue(), 0, 63, 0, 100);
+
+      // Update Model
+      _model.setTrackSwing(_model.activeTrackID, swingVal);
+
+      // Update UI State (for Display Overlay)
+      _lastSwingValue = swingVal;
+      _lastSwingChangeTime = millis();
+
+      LOG("Track %d Swing: %d\n", _model.activeTrackID, swingVal);
+    }
+    // CASE B: SONG MODE Pattern Select (No Shift)
+    else if (_model.getPlayMode() == MODE_SONG)
     {
       int pID = _paramPot.getValue();
+      // Safety Clamps
       if (pID < 0)
         pID = 0;
       if (pID >= MAX_PATTERNS)
         pID = MAX_PATTERNS - 1;
+
       _model.setPlaylistPattern(_uiSelectedSlot, pID);
     }
+    // CASE C: NORMAL OPERATION (Debug Log)
     else
     {
       LOG("Param Pot: %d\n", _paramPot.getValue());

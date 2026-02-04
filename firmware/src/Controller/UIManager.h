@@ -14,7 +14,7 @@ enum InterfaceMode
   UI_MODE_BPM_INPUT,
   UI_MODE_CONFIRM_CLEAR_TRACK,
   UI_MODE_CONFIRM_CLEAR_PATTERN,
-  UI_MODE_QUANTIZE_MENU // NEW
+  UI_MODE_QUANTIZE_MENU
 };
 
 class UIManager
@@ -33,6 +33,10 @@ public:
   int getSelectedSlot() const { return _uiSelectedSlot; }
   int getSongModeBankOffset() const { return _songModeBankOffset; }
 
+  // Getters for DisplayManager to show temporary overlays
+  unsigned long getLastSwingChangeTime() const { return _lastSwingChangeTime; }
+  int getLastSwingValue() const { return _lastSwingValue; }
+
 private:
   SequencerModel &_model;
   OutputDriver &_driver;
@@ -45,16 +49,17 @@ private:
   AnalogInput _paramPot;
   KeyMatrix _keyMatrix;
 
-  // BPM Input State
   char _inputBuffer[4];
   int _inputPtr;
   int _uiSelectedSlot;
   int _songModeBankOffset;
 
-  // Internal Logic Handlers
+  // NEW: Transient UI State
+  unsigned long _lastSwingChangeTime;
+  int _lastSwingValue;
+
   void _handleTrigger(int stepIndex);
   void _handleBPMInput(int key);
 
-  // Matrix Mapper
   InputCommand _mapMatrixToCommand(int switchID);
 };

@@ -1,5 +1,10 @@
 #include "ClockEngine.h"
 
+// 96 PPQN Constants
+#define PPQN 96
+#define TICKS_PER_STEP 24
+#define MAX_SWING_TICKS 12
+
 ClockEngine *ClockEngine::_instance = nullptr;
 
 ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
@@ -7,16 +12,16 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
 {
   _instance = this;
   _cachedBPM = 0;
-  _stepCounter = 0;
+  _accumulatedTime = 0;
   _pulseCounter = 0;
   _triggersActive = false;
   _running = false;
-  _isFirstStep = false;
+  _isFirstTick = false;
 }
 
 void ClockEngine::init()
 {
-  _timer.begin(onTick, 1000);
+  _timer.begin(onTick, 500);
 }
 
 void ClockEngine::onTick()
@@ -34,37 +39,29 @@ void ClockEngine::manualTrigger(uint16_t mask)
 
 void ClockEngine::_handleTick()
 {
-  // 1. HARDWARE TEST OVERRIDE
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
-    _stepCounter++;
-    if (_stepCounter >= 50)
-    {
-      _stepCounter = 0;
-      _model.advanceStep();
-    }
     return;
   }
 
-  // 2. PULSE MANAGEMENT
+  // PULSE MANAGEMENT
   if (_triggersActive)
   {
     _pulseCounter++;
-    if (_pulseCounter >= PULSE_WIDTH_MS)
+    if (_pulseCounter >= 30)
     {
       _driver.clearAllTriggers();
       _triggersActive = false;
     }
   }
 
-  // 3. CHECK SEQUENCER STATE
   bool isPlaying = _model.isPlaying();
 
   if (isPlaying && !_running)
   {
     _running = true;
-    _stepCounter = _stepInterval; // Force immediate trigger
-    _isFirstStep = true;          // Mark first step
+    _accumulatedTime = _tickInterval;
+    _isFirstTick = true;
   }
   else if (!isPlaying && _running)
   {
@@ -74,24 +71,25 @@ void ClockEngine::_handleTick()
   if (!_running)
     return;
 
-  // 4. STEP ADVANCEMENT
-  _stepCounter++;
-  if (_stepCounter >= _stepInterval)
-  {
-    _stepCounter = 0;
+  // TIME ACCUMULATION
+  _accumulatedTime += 0.5f;
 
-    if (_isFirstStep)
+  if (_accumulatedTime >= _tickInterval)
+  {
+    _accumulatedTime -= _tickInterval;
+
+    // --- CORE PPQN LOGIC ---
+    if (_isFirstTick)
     {
-      _isFirstStep = false;
-      // Do not advance on first step, just fire.
+      _isFirstTick = false;
+      _checkTriggers(_model.getCurrentStep(), 0);
     }
     else
     {
-      _model.advanceStep();
+      _model.advanceTick();
 
-      // --- QUANTIZED TRANSITION LOGIC ---
-      // Only apply pending patterns at specific intervals
-      if (_model.getPlayMode() == MODE_PATTERN_LOOP)
+      // Quantization Check
+      if (_model.getCurrentTick() == 0)
       {
         int currentStep = _model.getCurrentStep();
         QuantizationMode q = _model.getQuantization();
@@ -112,25 +110,47 @@ void ClockEngine::_handleTick()
           readyToSwitch = true;
           break;
         }
-
         if (readyToSwitch)
-        {
           _model.applyPendingPattern();
-        }
       }
-      // ---------------------------------------
+
+      // Fire Triggers
+      _checkTriggers(_model.getCurrentStep(), _model.getCurrentTick());
     }
+  }
+}
 
-    int patID = _model.getPlayingPatternID();
-    int step = _model.getCurrentStep();
-    uint16_t mask = _model.getTriggersForStep(patID, step);
+void ClockEngine::_checkTriggers(int step, int tick)
+{
+  int patID = _model.getPlayingPatternID();
+  uint16_t fireMask = 0;
 
-    if (mask > 0)
+  for (int t = 0; t < NUM_TRACKS; t++)
+  {
+    uint8_t swingAmount = _model.getPlayingTrackSwing(t);
+
+    int targetTick = 0;
+    // Apply delay only to ODD steps (the "ands" of the beat)
+    if (step % 2 != 0)
     {
-      _driver.setTriggers(mask);
-      _triggersActive = true;
-      _pulseCounter = 0;
+      targetTick = (swingAmount * MAX_SWING_TICKS) / 100;
     }
+
+    if (tick == targetTick)
+    {
+      uint16_t trackMask = (1 << t);
+      if (_model.getTriggersForStep(patID, step) & trackMask)
+      {
+        fireMask |= trackMask;
+      }
+    }
+  }
+
+  if (fireMask > 0)
+  {
+    _driver.setTriggers(fireMask);
+    _triggersActive = true;
+    _pulseCounter = 0;
   }
 }
 
@@ -148,5 +168,5 @@ void ClockEngine::_calculateInterval(int bpm)
 {
   if (bpm <= 0)
     bpm = 120;
-  _stepInterval = (60000 / bpm) / 4;
+  _tickInterval = 60000.0f / (bpm * 96.0f);
 }
