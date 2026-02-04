@@ -1,8 +1,6 @@
 #include "KeyMatrix.h"
 
-// LUT: Maps [Row][Col] to Switch Number (1-32) based on your schematic
-// Rows 0-1 are interleaved for Top Physical Row (1-16)
-// Rows 2-3 are interleaved for Bottom Physical Row (17-32)
+// LUT: Maps [Row][Col] to Switch Number (1-32)
 const int SWITCH_MAP[4][8] = {
     // Col 0, 1, 2, 3, 4, 5, 6, 7
     {1, 3, 5, 7, 9, 11, 13, 15},      // Row 1 (Pin 36) -> Odd Triggers
@@ -14,6 +12,8 @@ const int SWITCH_MAP[4][8] = {
 KeyMatrix::KeyMatrix()
 {
   _lastScanTime = 0;
+  _head = 0;
+  _tail = 0;
 }
 
 void KeyMatrix::init()
@@ -24,13 +24,10 @@ void KeyMatrix::init()
     pinMode(_colPins[i], INPUT_PULLUP);
   }
 
-  // Setup Rows (Outputs)
-  // OPEN DRAIN EMULATION:
-  // Active = OUTPUT LOW
-  // Inactive = INPUT (High Impedance)
+  // Setup Rows (Outputs) - Open Drain Emulation
   for (int i = 0; i < MATRIX_ROWS; i++)
   {
-    pinMode(_rowPins[i], INPUT); // Default to floating/inactive
+    pinMode(_rowPins[i], INPUT);
   }
 
   // Clear state
@@ -44,14 +41,12 @@ void KeyMatrix::init()
   }
 }
 
-int KeyMatrix::getEvent()
+void KeyMatrix::update()
 {
   // THROTTLE: Scan at ~200Hz (5ms) to handle debounce naturally
   if (millis() - _lastScanTime < 5)
-    return 0;
+    return;
   _lastScanTime = millis();
-
-  int eventID = 0;
 
   // SCAN LOOP
   for (int r = 0; r < MATRIX_ROWS; r++)
@@ -59,23 +54,25 @@ int KeyMatrix::getEvent()
     // Activate Row (Drive Low)
     pinMode(_rowPins[r], OUTPUT);
     digitalWrite(_rowPins[r], LOW);
-
-    // Allow signal to settle (very short delay)
-    delayMicroseconds(10);
+    delayMicroseconds(10); // Settle time
 
     // Read Cols
     for (int c = 0; c < MATRIX_COLS; c++)
     {
-      // LOW means PRESSED (because of Pullups)
       bool isPressed = (digitalRead(_colPins[c]) == LOW);
 
       // DETECT RISING EDGE (Just Pressed)
       if (isPressed && !_lastState[r][c])
       {
         _state[r][c] = true;
-        // We only return ONE event per scan to keep logic simple.
-        // Priority goes to first found.
-        eventID = SWITCH_MAP[r][c];
+
+        // PUSH TO RING BUFFER
+        int nextHead = (_head + 1) % EVENT_BUFFER_SIZE;
+        if (nextHead != _tail)
+        { // Prevent overflow overwriting
+          _eventBuffer[_head] = SWITCH_MAP[r][c];
+          _head = nextHead;
+        }
       }
       // DETECT FALLING EDGE (Released)
       else if (!isPressed && _lastState[r][c])
@@ -89,8 +86,17 @@ int KeyMatrix::getEvent()
     // Deactivate Row (Float)
     pinMode(_rowPins[r], INPUT);
   }
+}
 
-  return eventID;
+int KeyMatrix::getNextEvent()
+{
+  // Return 0 if buffer is empty
+  if (_head == _tail)
+    return 0;
+
+  int id = _eventBuffer[_tail];
+  _tail = (_tail + 1) % EVENT_BUFFER_SIZE;
+  return id;
 }
 
 bool KeyMatrix::isShiftHeld()
