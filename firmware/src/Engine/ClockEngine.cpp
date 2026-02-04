@@ -11,6 +11,7 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
   _pulseCounter = 0;
   _triggersActive = false;
   _running = false;
+  _isFirstStep = false; // Init
 }
 
 void ClockEngine::init()
@@ -24,21 +25,15 @@ void ClockEngine::onTick()
     _instance->_handleTick();
 }
 
-// NEW: Manual Trigger Injection
 void ClockEngine::manualTrigger(uint16_t mask)
 {
-  // Fire immediately
   _driver.setTriggers(mask);
-
-  // Tell ISR to count 15ms and then kill it
-  // (Safe to set these volatiles from outside ISR for this simple flag logic)
   _pulseCounter = 0;
   _triggersActive = true;
 }
 
 void ClockEngine::_handleTick()
 {
-  // 1. HARDWARE TEST OVERRIDE
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
     _stepCounter++;
@@ -50,9 +45,6 @@ void ClockEngine::_handleTick()
     return;
   }
 
-  // 2. PULSE MANAGEMENT (Priority High)
-  // Run this BEFORE checking _running.
-  // This ensures manual triggers are turned off even if Sequencer is Stopped.
   if (_triggersActive)
   {
     _pulseCounter++;
@@ -63,30 +55,40 @@ void ClockEngine::_handleTick()
     }
   }
 
-  // 3. CHECK SEQUENCER STATE
   bool isPlaying = _model.isPlaying();
 
+  // START EVENT
   if (isPlaying && !_running)
   {
     _running = true;
-    _stepCounter = _stepInterval; // Force immediate trigger
+    _stepCounter = _stepInterval; // Force immediate execution
+    _isFirstStep = true;          // <--- MARK AS FIRST STEP
   }
+  // STOP EVENT
   else if (!isPlaying && _running)
   {
     _running = false;
-    // Do not clear triggers here; let Pulse Management handle the tail
   }
 
   if (!_running)
     return;
 
-  // 4. STEP ADVANCEMENT
+  // STEP LOGIC
   _stepCounter++;
   if (_stepCounter >= _stepInterval)
   {
     _stepCounter = 0;
 
-    _model.advanceStep();
+    // Skip advance on the very first trigger
+    if (_isFirstStep)
+    {
+      _isFirstStep = false;
+      // Do not advance. Fire the step we are currently sitting on (Step 1).
+    }
+    else
+    {
+      _model.advanceStep();
+    }
 
     int patID = _model.getPlayingPatternID();
     int step = _model.getCurrentStep();

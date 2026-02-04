@@ -11,8 +11,6 @@ public:
 
   void init();
   void update();
-
-  // NEW: Allow manual firing (e.g. form UI) that respects the ISR timing
   void manualTrigger(uint16_t mask);
 
   static void onTick();
@@ -29,10 +27,10 @@ private:
   volatile unsigned long _stepCounter;
   volatile unsigned long _pulseCounter;
   volatile unsigned long _stepInterval;
-
-  // Triggers can be active even if sequencer is stopped (Manual Fire)
   volatile bool _triggersActive;
   volatile bool _running;
+
+  volatile bool _isFirstStep;
 
   void _handleTick();
   void _calculateInterval(int bpm);
