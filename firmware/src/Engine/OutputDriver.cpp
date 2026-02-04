@@ -1,4 +1,5 @@
 #include "OutputDriver.h"
+#include "Config.h"
 
 void OutputDriver::init()
 {
@@ -9,25 +10,22 @@ void OutputDriver::init()
   }
 }
 
-void OutputDriver::setTriggers(uint16_t trackMask)
+void OutputDriver::setTriggers(uint16_t mask)
 {
-  if (trackMask == 0)
-    return;
-  _writeHardware(trackMask, true);
+  for (int i = 0; i < NUM_TRACKS; i++)
+  {
+    // Check if bit 'i' is set
+    if ((mask >> i) & 1)
+    {
+      digitalWrite(OUTPUT_MAP[i], TRIGGER_ON);
+    }
+  }
 }
 
 void OutputDriver::clearAllTriggers()
 {
-  _writeHardware(0xFFFF, false);
-}
-
-void OutputDriver::_writeHardware(uint16_t mask, bool state)
-{
   for (int i = 0; i < NUM_TRACKS; i++)
   {
-    if (mask & (1 << i))
-    {
-      digitalWrite(OUTPUT_MAP[i], state ? TRIGGER_ON : TRIGGER_OFF);
-    }
+    digitalWrite(OUTPUT_MAP[i], TRIGGER_OFF);
   }
 }

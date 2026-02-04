@@ -1,8 +1,7 @@
 #pragma once
-#include <Arduino.h>
 
 // --- SYSTEM LIMITS ---
-#define NUM_TRACKS 4
+#define NUM_TRACKS 8
 #define NUM_STEPS 16
 #define MAX_PATTERNS 64
 #define MAX_SONG_LENGTH 128
@@ -12,7 +11,7 @@
 #define DEFAULT_BPM 120
 
 // --- HARDWARE MAPPING ---
-const int OUTPUT_MAP[NUM_TRACKS] = {25, 26, 27, 28};
+const int OUTPUT_MAP[NUM_TRACKS] = {25, 26, 27, 28, 29, 30, 31, 32};
 
 // --- INPUTS ---
 const int PIN_POT_TEMPO = 14;

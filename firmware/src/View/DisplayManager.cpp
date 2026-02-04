@@ -236,41 +236,72 @@ void DisplayManager::_drawGrid()
   int stepWidth = 7;
   int trackHeight = 12;
   int startY = 16;
+  int visibleRows = 4; // We show 4 tracks at a time
+
+  // 1. Calculate Scroll Offset
+  // Automatically scroll to keep the active track visible
+  static int scrollOffset = 0;
+
+  if (_model.activeTrackID >= scrollOffset + visibleRows)
+  {
+    scrollOffset = _model.activeTrackID - visibleRows + 1;
+  }
+  else if (_model.activeTrackID < scrollOffset)
+  {
+    scrollOffset = _model.activeTrackID;
+  }
 
   int viewPattern = _model.currentViewPatternID;
   int playingPattern = _model.getPlayingPatternID();
 
-  for (int track = 0; track < NUM_TRACKS; track++)
+  // 2. Draw Visible Tracks
+  for (int i = 0; i < visibleRows; i++)
   {
-    uint8_t swing = _model.getTrackSwing(track);
+    int trackIndex = scrollOffset + i;
+    if (trackIndex >= NUM_TRACKS)
+      break;
 
-    if (track == _model.activeTrackID)
+    uint8_t swing = _model.getTrackSwing(trackIndex);
+
+    // --- DRAW GUTTER LABEL (RIGHT SIDE) ---
+    // Grid ends at 112px. We draw label at 116px.
+    int labelY = startY + (i * trackHeight) + 9;
+
+    _u8g2.setFont(u8g2_font_profont10_mr);
+
+    if (trackIndex == _model.activeTrackID)
     {
-      int arrowY = startY + (track * trackHeight) + 8;
-      _u8g2.drawStr(122, arrowY, _ui.getMode() == UI_MODE_PERFORM ? TRACK_PERFORM_STR : TRACK_EDIT_STR);
+      // Highlight Active Track
+      _u8g2.setDrawColor(1);
+      _u8g2.drawBox(115, startY + (i * trackHeight), 12, 11);
+      _u8g2.setDrawColor(0); // Invert text
+      _u8g2.setCursor(117, labelY);
+      _u8g2.print((char)('A' + trackIndex));
+      _u8g2.setDrawColor(1); // Restore
+    }
+    else
+    {
+      _u8g2.setCursor(117, labelY);
+      _u8g2.print((char)('A' + trackIndex));
     }
 
+    // --- DRAW STEPS ---
     for (int step = 0; step < NUM_STEPS; step++)
     {
       int x = step * stepWidth;
-      int y = startY + (track * trackHeight);
+      int y = startY + (i * trackHeight);
 
       uint16_t mask = _model.getTriggersForStep(viewPattern, step);
-      bool isNoteOn = (mask >> track) & 1;
+      bool isNoteOn = (mask >> trackIndex) & 1;
 
-      // --- VISUAL SWING LOGIC ---
+      // Swing Visuals (Narrow/Shifted box)
       int boxX = x + 1;
       int boxW = 6;
-
-      // If this is an Off-Beat (Odd Index) and Swing is applied (>10%)
       if ((step % 2 != 0) && (swing > 10))
       {
-        // "Delay" the visual representation
-        // Shift right by 2 pixels, shrink width by 2 pixels
         boxX += 2;
         boxW -= 2;
       }
-      // --------------------------
 
       if (isNoteOn)
       {
@@ -278,23 +309,20 @@ void DisplayManager::_drawGrid()
       }
       else
       {
-        // Move the empty dot too, to keep the grid aligned visual
         int dotX = x + 3;
         if ((step % 2 != 0) && (swing > 10))
           dotX += 2;
-
         _u8g2.drawPixel(dotX, y + 4);
       }
     }
   }
 
+  // Playhead (Full Height of View)
   if (_model.isPlaying() && (viewPattern == playingPattern))
   {
     int cursorX = _model.getCurrentStep() * stepWidth;
-    // Note: We don't swing the cursor visual because the cursor represents "Grid Time",
-    // whereas the note represents "Trigger Time". It's actually helpful to see the cursor hit "early" vs the block.
-    _u8g2.setDrawColor(2);
-    _u8g2.drawBox(cursorX, startY - 2, stepWidth - 1, (NUM_TRACKS * trackHeight) + 4);
+    _u8g2.setDrawColor(2); // XOR mode
+    _u8g2.drawBox(cursorX, startY - 2, stepWidth - 1, (visibleRows * trackHeight) + 4);
     _u8g2.setDrawColor(1);
   }
 }

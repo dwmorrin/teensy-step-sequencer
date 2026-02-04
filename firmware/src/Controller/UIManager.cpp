@@ -42,34 +42,25 @@ void UIManager::processInput()
     bool shift = _keyMatrix.isShiftHeld();
 
     // CASE A: SWING CONTROL (Shift + Param)
-    // This works in any mode.
     if (shift)
     {
-      // Map Pot (0-63) to Swing % (0-100)
       int swingVal = map(_paramPot.getValue(), 0, 63, 0, 100);
-
-      // Update Model
       _model.setTrackSwing(_model.activeTrackID, swingVal);
-
-      // Update UI State (for Display Overlay)
       _lastSwingValue = swingVal;
       _lastSwingChangeTime = millis();
-
       LOG("Track %d Swing: %d\n", _model.activeTrackID, swingVal);
     }
     // CASE B: SONG MODE Pattern Select (No Shift)
     else if (_model.getPlayMode() == MODE_SONG)
     {
       int pID = _paramPot.getValue();
-      // Safety Clamps
       if (pID < 0)
         pID = 0;
       if (pID >= MAX_PATTERNS)
         pID = MAX_PATTERNS - 1;
-
       _model.setPlaylistPattern(_uiSelectedSlot, pID);
     }
-    // CASE C: NORMAL OPERATION (Debug Log)
+    // CASE C: NORMAL OPERATION
     else
     {
       LOG("Param Pot: %d\n", _paramPot.getValue());
@@ -131,8 +122,19 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
   case 20:
     return CMD_TRACK_4;
 
+  // NEW: Map physical buttons E, F, G (IDs 21-23)
+  case 21:
+    return CMD_TRACK_5;
+  case 22:
+    return CMD_TRACK_6;
+  case 23:
+    return CMD_TRACK_7;
+
+  // NEW: Map physical button H (ID 24)
   case 24:
-    return CMD_UNDO;
+    if (shift)
+      return CMD_UNDO;  // Shift + H = UNDO
+    return CMD_TRACK_8; // H = Track 8
 
   case 25:
     if (_model.getPlayMode() == MODE_SONG)
@@ -192,7 +194,25 @@ void UIManager::handleKeyPress(int key)
   else if (key == 'z')
     cmd = CMD_UNDO;
   else if (key == 'q')
-    cmd = CMD_QUANTIZE_MENU; // Shortcut 'q'
+    cmd = CMD_QUANTIZE_MENU;
+
+  // Track Direct Selection (A-H)
+  else if (key == 'a')
+    cmd = CMD_TRACK_1;
+  else if (key == 'b')
+    cmd = CMD_TRACK_2;
+  else if (key == 'c')
+    cmd = CMD_TRACK_3;
+  else if (key == 'd')
+    cmd = CMD_TRACK_4;
+  else if (key == 'e')
+    cmd = CMD_TRACK_5;
+  else if (key == 'f')
+    cmd = CMD_TRACK_6;
+  else if (key == 'g')
+    cmd = CMD_TRACK_7;
+  else if (key == 'h')
+    cmd = CMD_TRACK_8;
 
   // Navigation
   else if (key == '[')
@@ -252,12 +272,10 @@ void UIManager::handleCommand(InputCommand cmd)
       default:
         break;
       }
-      // Exit on select
       _currentMode = UI_MODE_PERFORM;
     }
     else
     {
-      // Exit on any other key
       _currentMode = UI_MODE_PERFORM;
     }
     return;
@@ -448,6 +466,18 @@ void UIManager::handleCommand(InputCommand cmd)
     case CMD_TRACK_4:
       _model.activeTrackID = 3;
       break;
+    case CMD_TRACK_5:
+      _model.activeTrackID = 4;
+      break;
+    case CMD_TRACK_6:
+      _model.activeTrackID = 5;
+      break;
+    case CMD_TRACK_7:
+      _model.activeTrackID = 6;
+      break;
+    case CMD_TRACK_8:
+      _model.activeTrackID = 7;
+      break;
     default:
       break;
     }
@@ -468,6 +498,18 @@ void UIManager::handleCommand(InputCommand cmd)
     break;
   case CMD_TRACK_4:
     _model.activeTrackID = 3;
+    break;
+  case CMD_TRACK_5:
+    _model.activeTrackID = 4;
+    break;
+  case CMD_TRACK_6:
+    _model.activeTrackID = 5;
+    break;
+  case CMD_TRACK_7:
+    _model.activeTrackID = 6;
+    break;
+  case CMD_TRACK_8:
+    _model.activeTrackID = 7;
     break;
 
   case CMD_PATTERN_PREV:
