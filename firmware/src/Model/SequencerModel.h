@@ -9,9 +9,17 @@ struct Pattern
 
 enum PlayMode
 {
-  MODE_PATTERN_LOOP, // Loop the current View Pattern
-  MODE_SONG,         // Play through the Playlist
-  MODE_HARDWARE_TEST // New Diagnostic Mode
+  MODE_PATTERN_LOOP,
+  MODE_SONG,
+  MODE_HARDWARE_TEST
+};
+
+enum QuantizationMode
+{
+  Q_BAR,     // Wait for Step 1
+  Q_QUARTER, // Wait for Step 1, 5, 9, 13
+  Q_EIGHTH,  // Wait for Step 1, 3, 5...
+  Q_INSTANT  // Switch Immediately
 };
 
 class SequencerModel
@@ -25,11 +33,20 @@ public:
   bool isPlaying() const { return _playing; }
 
   // --- NAVIGATION (VIEW) ---
-  int currentViewPatternID;
+  int currentViewPatternID; // What the User SEES
   int activeTrackID;
 
   void nextPattern();
   void prevPattern();
+  void setPattern(int patternID);
+
+  // --- QUANTIZATION ---
+  void setQuantization(QuantizationMode mode);
+  QuantizationMode getQuantization() const { return _quantizationMode; }
+
+  // Transition Logic
+  int getPendingPatternID() const { return _nextPatternID; }
+  void applyPendingPattern();
 
   // --- PLAYLIST (SONG) ---
   void setPlayMode(PlayMode mode);
@@ -38,14 +55,12 @@ public:
   int getPlaylistLength() const;
   int getPlaylistCursor() const;
 
-  // CRUD Operations for Playlist
   uint8_t getPlaylistPattern(int slotIndex) const;
   void setPlaylistPattern(int slotIndex, uint8_t patternID);
   void insertPlaylistSlot(int slotIndex, uint8_t patternID);
   void deletePlaylistSlot(int slotIndex);
 
   // --- EDITING ---
-  // Toggles a step in the CURRENTLY VIEWED pattern
   void toggleStep(int track, int step);
   void clearCurrentPattern();
   void clearTrack(int trackId);
@@ -55,17 +70,10 @@ public:
   void undo();
 
   // --- ENGINE INTERFACE ---
-  // Returns a bitmask of triggers for the specific step in the specific pattern.
   uint16_t getTriggersForStep(int patternID, int step);
-
-  // Logic helper for the View to know what is actually making sound
   int getPlayingPatternID() const;
 
-  // Advances the internal step counter.
-  // Returns TRUE if we just wrapped around (useful for UI updates)
   bool advanceStep();
-
-  // Getters for the Engine/View
   int getCurrentStep() const { return _currentStep; }
 
   // --- TEMPO ---
@@ -76,7 +84,6 @@ private:
   Pattern _patternPool[MAX_PATTERNS];
   Pattern _undoBuffer;
 
-  // Playlist State
   uint8_t _playlist[MAX_SONG_LENGTH];
   int _playlistLength;
   int _playlistCursor;
@@ -85,4 +92,8 @@ private:
   int _currentStep;
   PlayMode _playMode;
   int _bpm;
+
+  QuantizationMode _quantizationMode;
+  int _playingPatternID;
+  int _nextPatternID;
 };

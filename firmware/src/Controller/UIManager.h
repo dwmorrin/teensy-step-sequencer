@@ -14,6 +14,7 @@ enum InterfaceMode
   UI_MODE_BPM_INPUT,
   UI_MODE_CONFIRM_CLEAR_TRACK,
   UI_MODE_CONFIRM_CLEAR_PATTERN,
+  UI_MODE_QUANTIZE_MENU // NEW
 };
 
 class UIManager
@@ -30,8 +31,6 @@ public:
   InterfaceMode getMode() const { return _currentMode; };
   const char *getInputBuffer() const;
   int getSelectedSlot() const { return _uiSelectedSlot; }
-
-  // Getter for View to show which bank is active
   int getSongModeBankOffset() const { return _songModeBankOffset; }
 
 private:
@@ -50,7 +49,7 @@ private:
   char _inputBuffer[4];
   int _inputPtr;
   int _uiSelectedSlot;
-  int _songModeBankOffset; // 0, 16, 32, 48
+  int _songModeBankOffset;
 
   // Internal Logic Handlers
   void _handleTrigger(int stepIndex);

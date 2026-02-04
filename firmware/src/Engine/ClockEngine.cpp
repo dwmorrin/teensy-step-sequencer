@@ -11,7 +11,7 @@ ClockEngine::ClockEngine(SequencerModel &model, OutputDriver &driver)
   _pulseCounter = 0;
   _triggersActive = false;
   _running = false;
-  _isFirstStep = false; // Init
+  _isFirstStep = false;
 }
 
 void ClockEngine::init()
@@ -34,6 +34,7 @@ void ClockEngine::manualTrigger(uint16_t mask)
 
 void ClockEngine::_handleTick()
 {
+  // 1. HARDWARE TEST OVERRIDE
   if (_model.getPlayMode() == MODE_HARDWARE_TEST)
   {
     _stepCounter++;
@@ -45,6 +46,7 @@ void ClockEngine::_handleTick()
     return;
   }
 
+  // 2. PULSE MANAGEMENT
   if (_triggersActive)
   {
     _pulseCounter++;
@@ -55,16 +57,15 @@ void ClockEngine::_handleTick()
     }
   }
 
+  // 3. CHECK SEQUENCER STATE
   bool isPlaying = _model.isPlaying();
 
-  // START EVENT
   if (isPlaying && !_running)
   {
     _running = true;
-    _stepCounter = _stepInterval; // Force immediate execution
-    _isFirstStep = true;          // <--- MARK AS FIRST STEP
+    _stepCounter = _stepInterval; // Force immediate trigger
+    _isFirstStep = true;          // Mark first step
   }
-  // STOP EVENT
   else if (!isPlaying && _running)
   {
     _running = false;
@@ -73,21 +74,51 @@ void ClockEngine::_handleTick()
   if (!_running)
     return;
 
-  // STEP LOGIC
+  // 4. STEP ADVANCEMENT
   _stepCounter++;
   if (_stepCounter >= _stepInterval)
   {
     _stepCounter = 0;
 
-    // Skip advance on the very first trigger
     if (_isFirstStep)
     {
       _isFirstStep = false;
-      // Do not advance. Fire the step we are currently sitting on (Step 1).
+      // Do not advance on first step, just fire.
     }
     else
     {
       _model.advanceStep();
+
+      // --- QUANTIZED TRANSITION LOGIC ---
+      // Only apply pending patterns at specific intervals
+      if (_model.getPlayMode() == MODE_PATTERN_LOOP)
+      {
+        int currentStep = _model.getCurrentStep();
+        QuantizationMode q = _model.getQuantization();
+        bool readyToSwitch = false;
+
+        switch (q)
+        {
+        case Q_BAR:
+          readyToSwitch = (currentStep == 0);
+          break;
+        case Q_QUARTER:
+          readyToSwitch = (currentStep % 4 == 0);
+          break;
+        case Q_EIGHTH:
+          readyToSwitch = (currentStep % 2 == 0);
+          break;
+        case Q_INSTANT:
+          readyToSwitch = true;
+          break;
+        }
+
+        if (readyToSwitch)
+        {
+          _model.applyPendingPattern();
+        }
+      }
+      // ---------------------------------------
     }
 
     int patID = _model.getPlayingPatternID();

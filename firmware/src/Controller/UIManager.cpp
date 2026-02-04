@@ -15,7 +15,6 @@ UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &c
       _driver(driver),
       _clock(clock),
       _tempoPot(PIN_POT_TEMPO, POT_INVERT_POLARITY ? 300 : 30, POT_INVERT_POLARITY ? 30 : 300, 4),
-      // Param Pot mapped 0-63 for Pattern Selection in Song Mode
       _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 63 : 0, POT_INVERT_POLARITY ? 0 : 63, 2)
 {
   _currentMode = UI_MODE_STEP_EDIT;
@@ -36,18 +35,15 @@ void UIManager::processInput()
     _model.setBPM(_tempoPot.getValue());
   }
 
-  // Param Pot: In Song Mode, it scrolls the Pattern ID for the selected slot
   if (_paramPot.update())
   {
     if (_model.getPlayMode() == MODE_SONG)
     {
       int pID = _paramPot.getValue();
-      // Safety clamp
       if (pID < 0)
         pID = 0;
       if (pID >= MAX_PATTERNS)
         pID = MAX_PATTERNS - 1;
-
       _model.setPlaylistPattern(_uiSelectedSlot, pID);
     }
     else
@@ -57,10 +53,8 @@ void UIManager::processInput()
   }
 
   // 2. MATRIX SCAN
-  // Run the hardware scan (pushes events to buffer)
   _keyMatrix.update();
 
-  // Consume ALL events in the buffer
   while (int swID = _keyMatrix.getNextEvent())
   {
     LOG("Matrix Event: Switch %d\n", swID);
@@ -73,7 +67,7 @@ void UIManager::processInput()
 }
 
 // ----------------------------------------------------------------------
-// MAPPER: MATRIX SWITCH ID -> COMMAND
+// MAPPER
 // ----------------------------------------------------------------------
 InputCommand UIManager::_mapMatrixToCommand(int id)
 {
@@ -82,7 +76,6 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
   // ROW 1 & 2 (Physical): Steps 1-16
   if (id >= 1 && id <= 16)
   {
-    // Shift + Steps 1-4 = Bank Select
     if (shift && id <= 4)
     {
       switch (id)
@@ -99,7 +92,6 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
         return CMD_NONE;
       }
     }
-    // Normal Press
     return (InputCommand)(CMD_TRIGGER_1 + (id - 1));
   }
 
@@ -107,52 +99,53 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
   switch (id)
   {
   case 17:
-    return CMD_TRACK_1; // A
+    return CMD_TRACK_1;
   case 18:
-    return CMD_TRACK_2; // B
+    return CMD_TRACK_2;
   case 19:
-    return CMD_TRACK_3; // C
+    return CMD_TRACK_3;
   case 20:
-    return CMD_TRACK_4; // D
+    return CMD_TRACK_4;
 
   case 24:
-    return CMD_UNDO; // Switch H (24)
+    return CMD_UNDO;
 
   case 25:
-    // Context-sensitive CLEAR: Delete Slot in Song Mode
     if (_model.getPlayMode() == MODE_SONG)
       return CMD_PLAYLIST_DELETE;
     return CMD_CLEAR_PROMPT;
 
   case 26:
-    return CMD_TRACK_PREV; // Up
+    return CMD_TRACK_PREV;
   case 27:
-    return CMD_TRACK_NEXT; // Down
+    return CMD_TRACK_NEXT;
 
-  case 28: // LEFT
+  case 28:
     if (shift && _model.getPlayMode() == MODE_SONG)
       return CMD_PLAYLIST_INSERT_PREV;
     if (_model.getPlayMode() == MODE_SONG)
       return CMD_PLAYLIST_PREV;
     return CMD_PATTERN_PREV;
 
-  case 29: // RIGHT
+  case 29:
     if (shift && _model.getPlayMode() == MODE_SONG)
       return CMD_PLAYLIST_INSERT_NEXT;
     if (_model.getPlayMode() == MODE_SONG)
       return CMD_PLAYLIST_NEXT;
     return CMD_PATTERN_NEXT;
 
-  case 30:
-    return CMD_TRANSPORT_TOGGLE; // Play
+  case 30: // PLAY
+    if (shift)
+      return CMD_QUANTIZE_MENU;
+    return CMD_TRANSPORT_TOGGLE;
 
-  case 31: // MODE
+  case 31:
     if (shift)
       return CMD_SONG_MODE_TOGGLE;
     return CMD_MODE_TOGGLE;
 
   case 32:
-    return CMD_NONE; // SHIFT handled via isShiftHeld()
+    return CMD_NONE;
 
   default:
     return CMD_NONE;
@@ -160,102 +153,39 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
 }
 
 // ----------------------------------------------------------------------
-// TRANSLATOR: ASCII -> COMMAND
+// TRANSLATOR
 // ----------------------------------------------------------------------
 void UIManager::handleKeyPress(int key)
 {
-  LOG("Key: %d\n", key);
-
-  if (_currentMode == UI_MODE_BPM_INPUT)
-  {
-    _handleBPMInput(key);
-    return;
-  }
-
   InputCommand cmd = CMD_NONE;
 
-  // 1. GLOBAL KEYS
   if (key == ASCII_SPACE)
     cmd = CMD_TRANSPORT_TOGGLE;
   else if (key == ASCII_TAB)
     cmd = CMD_MODE_TOGGLE;
   else if (key == ASCII_CR || key == ASCII_LF)
     cmd = CMD_SONG_MODE_TOGGLE;
-  else if (key == 't')
-    cmd = CMD_TEST_TOGGLE;
-  else if (key == 'b' || key == 'B')
-    cmd = CMD_BPM_ENTER;
-  else if (key == ASCII_BS || key == ASCII_DEL)
+  else if (key == 'z')
     cmd = CMD_UNDO;
-  else if (key == 'z') // Standard Undo shortcut
-    cmd = CMD_UNDO;
+  else if (key == 'q')
+    cmd = CMD_QUANTIZE_MENU; // Shortcut 'q'
 
-  // 2. NAVIGATION
+  // Navigation
   else if (key == '[')
     cmd = CMD_PATTERN_PREV;
   else if (key == ']')
     cmd = CMD_PATTERN_NEXT;
-  else if (key == 218)
-    cmd = CMD_TRACK_PREV;
-  else if (key == 217)
-    cmd = CMD_TRACK_NEXT;
-  else if (key == 216)
-    cmd = CMD_PLAYLIST_PREV;
-  else if (key == 215)
-    cmd = CMD_PLAYLIST_NEXT;
 
-  // 3. EDITING / TRIGGERS
+  // Triggers
   else if (key >= '1' && key <= '4')
     cmd = (InputCommand)(CMD_TRIGGER_1 + (key - '1'));
-  else if (key == 'q')
-    cmd = CMD_TRIGGER_5;
-  else if (key == 'w')
-    cmd = CMD_TRIGGER_6;
-  else if (key == 'e')
-    cmd = CMD_TRIGGER_7;
-  else if (key == 'r')
-    cmd = CMD_TRIGGER_8;
-  else if (key == 'a')
-    cmd = CMD_TRIGGER_9;
-  else if (key == 's')
-    cmd = CMD_TRIGGER_10;
-  else if (key == 'd')
-    cmd = CMD_TRIGGER_11;
-  else if (key == 'f')
-    cmd = CMD_TRIGGER_12;
-  else if (key == 'z') // Note: 'z' is mapped to Undo above for USB users, check conflicts
-    cmd = CMD_TRIGGER_13;
-  else if (key == 'c')
-    cmd = CMD_TRIGGER_15;
-  else if (key == 'v')
-    cmd = CMD_TRIGGER_16;
-
-  else if (key == 'x')
-  {
-    if (_model.getPlayMode() == MODE_SONG)
-      cmd = CMD_PLAYLIST_DELETE;
-    else
-      cmd = CMD_TRIGGER_14;
-  }
-
-  // 4. PLAYLIST / MODAL
-  else if (key == 'i' || key == 'I')
-    cmd = CMD_PLAYLIST_INSERT_PREV; // Default legacy 'i' to insert before
-  else if (key == '#')
-    cmd = CMD_CLEAR_PROMPT;
-  else if (key == 'y' || key == 'Y')
-    cmd = CMD_CONFIRM_YES;
-  else if (key == 'n' || key == 'N' || key == ASCII_ESC)
-    cmd = CMD_CONFIRM_NO;
 
   if (cmd != CMD_NONE)
-  {
     handleCommand(cmd);
-  }
 }
 
 // ----------------------------------------------------------------------
-// EXECUTOR: COMMAND -> ACTION
+// EXECUTOR
 // ----------------------------------------------------------------------
 void UIManager::handleCommand(InputCommand cmd)
 {
@@ -274,11 +204,45 @@ void UIManager::handleCommand(InputCommand cmd)
     return;
   }
 
-  // --- PRIORITY 2: MODAL HANDLING ---
+  // --- PRIORITY 2: MODAL HANDLING (MENUS) ---
+
+  // A. QUANTIZE MENU
+  if (_currentMode == UI_MODE_QUANTIZE_MENU)
+  {
+    if (cmd >= CMD_TRIGGER_1 && cmd <= CMD_TRIGGER_4)
+    {
+      switch (cmd)
+      {
+      case CMD_TRIGGER_1:
+        _model.setQuantization(Q_BAR);
+        break;
+      case CMD_TRIGGER_2:
+        _model.setQuantization(Q_QUARTER);
+        break;
+      case CMD_TRIGGER_3:
+        _model.setQuantization(Q_EIGHTH);
+        break;
+      case CMD_TRIGGER_4:
+        _model.setQuantization(Q_INSTANT);
+        break;
+      default:
+        break;
+      }
+      // Exit on select
+      _currentMode = UI_MODE_PERFORM;
+    }
+    else
+    {
+      // Exit on any other key
+      _currentMode = UI_MODE_PERFORM;
+    }
+    return;
+  }
+
+  // B. CLEAR PROMPT
   if (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK ||
       _currentMode == UI_MODE_CONFIRM_CLEAR_PATTERN)
   {
-    // Note: USB Enter sends CMD_SONG_MODE_TOGGLE, which acts as YES here.
     bool isYes = (cmd == CMD_CONFIRM_YES || cmd == CMD_SONG_MODE_TOGGLE);
     if (cmd >= CMD_TRIGGER_1 && cmd <= CMD_TRIGGER_4)
       isYes = true;
@@ -298,13 +262,9 @@ void UIManager::handleCommand(InputCommand cmd)
     else if (isNo || cmd == CMD_CLEAR_PROMPT)
     {
       if (cmd == CMD_CLEAR_PROMPT)
-      {
         _currentMode = (_currentMode == UI_MODE_CONFIRM_CLEAR_TRACK) ? UI_MODE_CONFIRM_CLEAR_PATTERN : UI_MODE_CONFIRM_CLEAR_TRACK;
-      }
       else
-      {
         _currentMode = UI_MODE_STEP_EDIT;
-      }
     }
     return;
   }
@@ -316,6 +276,10 @@ void UIManager::handleCommand(InputCommand cmd)
     _model.isPlaying() ? _model.stop() : _model.play();
     return;
 
+  case CMD_QUANTIZE_MENU:
+    _currentMode = UI_MODE_QUANTIZE_MENU;
+    return;
+
   case CMD_MODE_TOGGLE:
     _currentMode = (_currentMode == UI_MODE_STEP_EDIT) ? UI_MODE_PERFORM : UI_MODE_STEP_EDIT;
     return;
@@ -324,11 +288,10 @@ void UIManager::handleCommand(InputCommand cmd)
   {
     PlayMode pm = _model.getPlayMode();
     _model.setPlayMode(pm == MODE_PATTERN_LOOP ? MODE_SONG : MODE_PATTERN_LOOP);
-    // Reset bank offset when entering song mode
     if (_model.getPlayMode() == MODE_SONG)
       _songModeBankOffset = 0;
-    return;
   }
+    return;
 
   case CMD_UNDO:
     _model.undo();
@@ -359,29 +322,19 @@ void UIManager::handleCommand(InputCommand cmd)
       if (_uiSelectedSlot < _model.getPlaylistLength() - 1)
         _uiSelectedSlot++;
       break;
-
-    // --- SONG EDITING COMMANDS ---
     case CMD_PLAYLIST_INSERT_PREV:
-    {
-      uint8_t currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
-      _model.insertPlaylistSlot(_uiSelectedSlot, currentPat); // Insert at current
-      // Cursor stays at current index (which is the new slot)
+      _model.insertPlaylistSlot(_uiSelectedSlot, _model.getPlaylistPattern(_uiSelectedSlot));
       break;
-    }
     case CMD_PLAYLIST_INSERT_NEXT:
-    {
-      uint8_t currentPat = _model.getPlaylistPattern(_uiSelectedSlot);
-      _model.insertPlaylistSlot(_uiSelectedSlot + 1, currentPat);
-      _uiSelectedSlot++; // Move to the new slot
+      _model.insertPlaylistSlot(_uiSelectedSlot + 1, _model.getPlaylistPattern(_uiSelectedSlot));
+      _uiSelectedSlot++;
       break;
-    }
     case CMD_PLAYLIST_DELETE:
       _model.deletePlaylistSlot(_uiSelectedSlot);
       if (_uiSelectedSlot >= _model.getPlaylistLength())
         _uiSelectedSlot = max(0, _model.getPlaylistLength() - 1);
       break;
 
-    // --- BANK SELECTION ---
     case CMD_PLAYLIST_BANK_1:
       _songModeBankOffset = 0;
       break;
@@ -395,7 +348,6 @@ void UIManager::handleCommand(InputCommand cmd)
       _songModeBankOffset = 48;
       break;
 
-    // --- PATTERN SELECTION (1-16 + Offset) ---
     case CMD_TRIGGER_1:
       _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 0);
       break;
@@ -445,25 +397,21 @@ void UIManager::handleCommand(InputCommand cmd)
       _model.setPlaylistPattern(_uiSelectedSlot, _songModeBankOffset + 15);
       break;
 
-    // Legacy support for Pattern Prev/Next via Arrows if not caught by mapMatrix
     case CMD_PATTERN_NEXT:
     {
-      int p = _model.getPlaylistPattern(_uiSelectedSlot);
-      p = (p + 1) % MAX_PATTERNS;
+      int p = (_model.getPlaylistPattern(_uiSelectedSlot) + 1) % MAX_PATTERNS;
       _model.setPlaylistPattern(_uiSelectedSlot, p);
       break;
     }
     case CMD_PATTERN_PREV:
     {
-      int p = _model.getPlaylistPattern(_uiSelectedSlot);
-      p--;
+      int p = _model.getPlaylistPattern(_uiSelectedSlot) - 1;
       if (p < 0)
         p = MAX_PATTERNS - 1;
       _model.setPlaylistPattern(_uiSelectedSlot, p);
       break;
     }
 
-    // Direct Track selection (Function keys 17-20)
     case CMD_TRACK_1:
       _model.activeTrackID = 0;
       break;
@@ -476,7 +424,6 @@ void UIManager::handleCommand(InputCommand cmd)
     case CMD_TRACK_4:
       _model.activeTrackID = 3;
       break;
-
     default:
       break;
     }
@@ -514,7 +461,6 @@ void UIManager::handleCommand(InputCommand cmd)
     if (_model.activeTrackID > 0)
       _model.activeTrackID--;
     break;
-
   case CMD_CLEAR_PROMPT:
     _currentMode = UI_MODE_CONFIRM_CLEAR_TRACK;
     break;
@@ -578,9 +524,7 @@ void UIManager::_handleTrigger(int stepIndex)
   if (_currentMode == UI_MODE_PERFORM)
   {
     if (stepIndex < 4)
-    {
       _clock.manualTrigger(1 << stepIndex);
-    }
   }
   else
   {
@@ -605,16 +549,12 @@ void UIManager::_handleBPMInput(int key)
     {
       int newBPM = atoi(_inputBuffer);
       if (newBPM >= 30 && newBPM <= 300)
-      {
         _model.setBPM(newBPM);
-      }
     }
     _currentMode = UI_MODE_STEP_EDIT;
   }
   if (key == ASCII_ESC)
-  {
     _currentMode = UI_MODE_STEP_EDIT;
-  }
   if ((key == ASCII_BS || key == ASCII_DEL) && _inputPtr > 0)
   {
     _inputPtr--;
@@ -622,7 +562,4 @@ void UIManager::_handleBPMInput(int key)
   }
 }
 
-const char *UIManager::getInputBuffer() const
-{
-  return _inputBuffer;
-}
+const char *UIManager::getInputBuffer() const { return _inputBuffer; }
