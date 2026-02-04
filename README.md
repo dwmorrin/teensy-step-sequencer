@@ -10,13 +10,13 @@ This project implements a hardware-based step sequencer using the Teensy 4.1 mic
 
 ### Hardware Renders
 
-|                       Main Board                        |                        Switchplate                        |
+|                         Main Board                         |                         Switchplate                         |
 | :-----------------------------------------------------: | :-------------------------------------------------------: |
 | ![Main Board Render](docs/images/main-board-render.png) | ![Switchplate Render](docs/images/switchplate-render.png) |
 
 ## System Overview
 
-The application is designed as a standalone, embedded instrument. It functions as a 4-track step sequencer with support for pattern chaining (Song Mode), real-time performance triggers, and visual feedback via an I2C OLED display and a dedicated LED step array.
+The application is designed as a standalone, embedded instrument. It functions as an **8-track** step sequencer with support for **96 PPQN high-resolution timing**, pattern chaining (Song Mode), **per-track swing**, real-time performance triggers, and visual feedback via an I2C OLED display with scrolling track views.
 
 ### Hardware Dependencies
 
@@ -26,18 +26,18 @@ The application is designed as a standalone, embedded instrument. It functions a
 - **Input:** - Standard USB HID Keyboard (via USB Host).
   - 4x8 Diode Matrix Keyboard (32 switches).
   - 2x Analog Potentiometers (Tempo and Parameter control).
-- **Output:** 4x 5V Logic Triggers (GPIO).
+- **Output:** **8x** 5V Logic Triggers (GPIO).
 
 ## Software Architecture
 
 The codebase adopts a modular architecture separating data, presentation, and hardware control. The source code located in `src/` is organized into the following domains:
 
 - **Model** (`src/Model/`)
-  This directory contains the core logic and data structures. It serves as the single source of truth for the application, managing the Pattern Pool, the Playlist (Song Mode), and the Undo buffer. The Model is decoupled from hardware; it does not know if it is being driven by a clock or edited by a keyboard.
+  This directory contains the core logic and data structures. It serves as the single source of truth for the application, managing the Pattern Pool, the Playlist (Song Mode), Swing parameters, and the Undo buffer. The Model is decoupled from hardware; it does not know if it is being driven by a clock or edited by a keyboard.
 
 - **View** (`src/View/`)
   This directory handles all visual output.
-  - `DisplayManager`: Observes the Model and renders the interface (Grid, Transport, Headers) to the OLED.
+  - `DisplayManager`: Observes the Model and renders the interface (Grid, Transport, Headers) to the OLED. It handles **viewport scrolling** to display 8 tracks on a 4-track height screen.
   - `StepLeds`: Manages the 16-step LED array via SPI shift registers.
     The view layer includes internal throttling logic to maintain a consistent frame rate without blocking the audio/timing threads.
 
@@ -51,7 +51,7 @@ The codebase adopts a modular architecture separating data, presentation, and ha
 
 - **Engine** (`src/Engine/`)
   This directory handles real-time operations.
-  - `ClockEngine`: Manages the BPM timer and advances the Model's playhead.
+  - `ClockEngine`: A **96 PPQN** (Pulses Per Quarter Note) interrupt-driven engine. It calculates micro-timing for **Swing** and groove effects, offering 24 "ticks" per 16th-note step.
   - `OutputDriver`: Abstraction layer for the physical hardware. It converts track bitmasks into GPIO signals using high-precision interrupt timers.
 
 - **Configuration** (`src/Config.h`)
@@ -60,14 +60,6 @@ The codebase adopts a modular architecture separating data, presentation, and ha
 ## Expansion Guidelines
 
 The system is designed to be extensible. Developers looking to expand functionality should consider the following architectural patterns:
-
-### Increasing Track Count
-
-The system currently defaults to 4 tracks. To expand this:
-
-1.  Update the `NUM_TRACKS` definition in `Config.h`.
-2.  Update the hardware mapping in `src/Engine/OutputDriver`.
-    The Model and View logic are written dynamically and will automatically adjust to handle 8 or 16 tracks.
 
 ### Persistence (SD Card Storage)
 
@@ -79,10 +71,10 @@ Current pattern data is stored in volatile RAM and is lost upon power cycle. The
 
 ## Timing Calculation
 
-The system timing is based on a standard 4/4 time signature where a "beat" represents a quarter note. The sequencer resolution is 16th notes (4 steps per beat).
+The system timing is based on a standard 4/4 time signature where a "beat" represents a quarter note. 
 
-The interval $T$ (milliseconds per step) is calculated as:
+The engine runs at **96 PPQN** resolution. The interval $T$ (milliseconds per tick) is calculated as:
 
-$T = \frac{60,000}{BPM \times 4} = \frac{15,000}{BPM}$
+$$T = \frac{60,000}{BPM \times 96}$$
 
-For a standard trigger pulse width of 15ms, the maximum theoretical tempo before pulse overlap is 1000 BPM.
+For a standard trigger pulse width of 15ms, the system manages overlapping triggers via a pulse-counter in the interrupt service routine.
