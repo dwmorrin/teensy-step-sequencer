@@ -141,8 +141,8 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
 
   case 31:
     if (shift)
-      return CMD_SONG_MODE_TOGGLE;
-    return CMD_MODE_TOGGLE;
+      return CMD_MODE_TOGGLE;
+    return CMD_SONG_MODE_TOGGLE;
 
   case 32:
     return CMD_NONE;
