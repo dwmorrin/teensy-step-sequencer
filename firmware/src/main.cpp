@@ -8,6 +8,7 @@
 #include "Controller/UIManager.h"
 #include "Engine/OutputDriver.h"
 #include "Engine/ClockEngine.h"
+#include "StorageManager/StorageManager.h"
 
 // --- USB HOST SETUP ---
 USBHost myusb;
@@ -22,7 +23,8 @@ const int PIN_SR_LATCH = 10;
 SequencerModel model;
 OutputDriver driver;
 ClockEngine clockEngine(model, driver);
-UIManager ui(model, driver, clockEngine);
+StorageManager storage;
+UIManager ui(model, driver, clockEngine, storage);
 
 // DisplayManager now receives the Latch Pin for the LEDs
 DisplayManager display(model, ui, PIN_SR_LATCH);
@@ -33,13 +35,17 @@ void globalKeyPress(int key);
 // --- SETUP ---
 void setup()
 {
-  // Optional: Serial for debugging (remove if standalone)
-  // Serial.begin(9600);
+#ifdef DEBUG_MODE
+  Serial.begin(9600);
+#endif
 
   // 1. Init Subsystems
   driver.init();
   display.init(); // Inits OLED and LEDs
   ui.init();
+
+  if (storage.init())
+    storage.loadState(model);
 
   // 2. Init USB
   myusb.begin();
@@ -58,13 +64,19 @@ void globalKeyPress(int key)
 // --- MAIN LOOP ---
 void loop()
 {
-  // 1. HARDWARE TASKS
+  // HARDWARE TASKS
   myusb.Task();
 
-  // 2. TIMING ENGINE
+  // TIMING ENGINE
   clockEngine.update();
 
-  // 3. INTERFACE
+  // INTERFACE
   ui.processInput();
   display.update();
+
+  // STORAGE
+  if (ui.isSavePending())
+    ui.executePendingSave();
+  if (ui.isLoadPending())
+    ui.executePendingLoad();
 }

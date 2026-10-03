@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "Config.h"
 
 struct Pattern
@@ -86,6 +87,10 @@ public:
   // --- TEMPO ---
   void setBPM(int bpm);
   int getBPM() const;
+
+  // --- STORAGE ---
+  void serialize(JsonDocument &doc) const;
+  void deserialize(const JsonDocument &doc);
 
 private:
   Pattern _patternPool[MAX_PATTERNS];

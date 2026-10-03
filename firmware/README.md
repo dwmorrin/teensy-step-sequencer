@@ -9,6 +9,7 @@ A interrupt-driven step sequencer for Teensy 4.1.
 - **Groove Engine:** Per-track Swing (0-100%) with visual grid feedback.
 - **Performance Quantization:** Launch patterns synced to 1 Bar, 1/4 Note, 1/8 Note, or Instant.
 - **Song Mode:** Chained pattern playback with insert/delete editing.
+- **Persistent Storage:** Save and load entire sequencer state (BPM, Patterns, Playlist) to the Teensy's built-in microSD card in JSON format.
 - **Scrolling Interface:** 128x64 OLED UI with auto-scrolling track view and "Gutter" labels.
 
 ## Controls
@@ -24,11 +25,13 @@ A interrupt-driven step sequencer for Teensy 4.1.
 
 ### Navigation & Selection
 
-| Button    | Function                             |
-| :-------- | :----------------------------------- |
-| **A - H** | Select Active Track (1 - 8)          |
-| **< / >** | Previous / Next Pattern              |
-| **^ / v** | Previous / Next Track (Scrolls View) |
+| Button    | Function                             | Shift Function         |
+| :-------- | :----------------------------------- | :--------------------- |
+| **A**     | Select Track 1                       | **Save State to SD**   |
+| **B**     | Select Track 2                       | **Load State from SD** |
+| **C - H** | Select Active Track (3 - 8)          | -                      |
+| **< / >** | Previous / Next Pattern              | -                      |
+| **^ / v** | Previous / Next Track (Scrolls View) | -                      |
 
 ### Editing (Step Edit Mode)
 
@@ -56,12 +59,14 @@ A interrupt-driven step sequencer for Teensy 4.1.
 ## Architecture
 
 - **Model:** `SequencerModel` holds the state (Patterns, Playlist, Swing). It is decoupled from the engine.
+- **Storage:** `StorageManager` serializes the model to/from JSON and interfaces with the built-in SD card.
 - **Engine:** `ClockEngine` runs at **2kHz** (0.5ms interval), accumulating time to drive a **96 PPQN** virtual clock. It handles swing delays and trigger pulse widths.
 - **Controller:** `UIManager` maps a 4x8 Matrix and Analog Inputs to Commands.
 - **View:** `DisplayManager` renders the state to an SSD1306 OLED, handling scrolling offsets and overlays.
 
 ## Hardware Map
 
+- **MicroSD:** Teensy 4.1 Built-in SDIO
 - **Outputs 1-8:** Pins 25-32
 - **Tempo Pot:** Pin 14
 - **Param Pot:** Pin 15

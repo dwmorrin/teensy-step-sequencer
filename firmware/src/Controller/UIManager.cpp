@@ -10,10 +10,11 @@
 #define ASCII_SPACE 32
 #define ASCII_DEL 127
 
-UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &clock)
+UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &clock, StorageManager &storage)
     : _model(model),
       _driver(driver),
       _clock(clock),
+      _storage(storage),
       _tempoPot(PIN_POT_TEMPO, POT_INVERT_POLARITY ? 300 : 30, POT_INVERT_POLARITY ? 30 : 300, 4),
       _paramPot(PIN_POT_PARAM, POT_INVERT_POLARITY ? 63 : 0, POT_INVERT_POLARITY ? 0 : 63, 2)
 {
@@ -22,6 +23,10 @@ UIManager::UIManager(SequencerModel &model, OutputDriver &driver, ClockEngine &c
   _songModeBankOffset = 0;
   _lastSwingChangeTime = 0;
   _lastSwingValue = 0;
+  _lastSaveTime = 0;
+  _lastLoadTime = 0;
+  _isSavePending = false;
+  _isLoadPending = false;
 }
 
 void UIManager::init()
@@ -114,8 +119,12 @@ InputCommand UIManager::_mapMatrixToCommand(int id)
   switch (id)
   {
   case 17:
+    if (shift)
+      return CMD_SAVE_STATE;
     return CMD_TRACK_1;
   case 18:
+    if (shift)
+      return CMD_LOAD_STATE;
     return CMD_TRACK_2;
   case 19:
     return CMD_TRACK_3;
@@ -195,6 +204,10 @@ void UIManager::handleKeyPress(int key)
     cmd = CMD_UNDO;
   else if (key == 'q')
     cmd = CMD_QUANTIZE_MENU;
+  else if (key == 's')
+    cmd = CMD_SAVE_STATE;
+  else if (key == 'l')
+    cmd = CMD_LOAD_STATE;
 
   // Track Direct Selection (A-H)
   else if (key == 'a')
@@ -343,6 +356,16 @@ void UIManager::handleCommand(InputCommand cmd)
     _currentMode = UI_MODE_BPM_INPUT;
     _inputPtr = 0;
     memset(_inputBuffer, 0, sizeof(_inputBuffer));
+    return;
+
+  case CMD_SAVE_STATE:
+    _lastSaveTime = millis();
+    _isSavePending = true;
+    return;
+
+  case CMD_LOAD_STATE:
+    _lastLoadTime = millis();
+    _isLoadPending = true;
     return;
 
   default:
@@ -629,3 +652,15 @@ void UIManager::_handleBPMInput(int key)
 }
 
 const char *UIManager::getInputBuffer() const { return _inputBuffer; }
+
+void UIManager::executePendingLoad()
+{
+  _storage.loadState(_model);
+  _isLoadPending = false;
+}
+
+void UIManager::executePendingSave()
+{
+  _storage.saveState(_model);
+  _isSavePending = false;
+}

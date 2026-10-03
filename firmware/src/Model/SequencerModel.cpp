@@ -1,3 +1,4 @@
+#include "Debug.h"
 #include "SequencerModel.h"
 
 // CONSTANTS FOR 96 PPQN
@@ -308,4 +309,85 @@ bool SequencerModel::advanceTick()
     }
   }
   return false;
+}
+
+// -------------------------------------------------------------------------
+// STORAGE
+// -------------------------------------------------------------------------
+void SequencerModel::serialize(JsonDocument& doc) const
+{
+    doc["bpm"] = _bpm;
+    doc["playMode"] = (int)_playMode;
+    doc["playlistLength"] = _playlistLength;
+    
+    JsonArray pl = doc["playlist"].to<JsonArray>();
+    for(int i = 0; i < _playlistLength; i++) {
+        pl.add(_playlist[i]);
+    }
+
+    JsonArray pats = doc["patterns"].to<JsonArray>();
+    for(int p = 0; p < MAX_PATTERNS; p++) {
+        JsonObject pat = pats.add<JsonObject>();
+        JsonArray steps = pat["s"].to<JsonArray>();
+        JsonArray swings = pat["sw"].to<JsonArray>();
+        
+        for(int t = 0; t < NUM_TRACKS; t++) {
+            uint16_t mask = 0;
+            for(int s = 0; s < NUM_STEPS; s++) {
+                if(_patternPool[p].steps[t][s]) {
+                    mask |= (1 << s);
+                }
+            }
+            steps.add(mask);
+            swings.add(_patternPool[p].trackSwing[t]);
+        }
+    }
+}
+
+void SequencerModel::deserialize(const JsonDocument& doc)
+{
+    if (doc["bpm"].is<int>()) setBPM(doc["bpm"]);
+    if (doc["playMode"].is<int>()) _playMode = (PlayMode)doc["playMode"].as<int>();
+    if (doc["playlistLength"].is<int>()) _playlistLength = doc["playlistLength"];
+
+    JsonArrayConst pl = doc["playlist"];
+    if (!pl.isNull()) {
+        for(int i = 0; i < _playlistLength && i < MAX_SONG_LENGTH; i++) {
+            _playlist[i] = pl[i];
+        }
+    }
+
+    JsonArrayConst pats = doc["patterns"];
+    if (!pats.isNull()) {
+        LOGLN("SD_LOAD_DEBUG: Found patterns array. Size: %u", pats.size());
+        int p = 0;
+        
+        for (JsonObjectConst pat : pats) {
+            if (p >= MAX_PATTERNS) break;
+            
+            JsonArrayConst steps = pat["s"];
+            JsonArrayConst swings = pat["sw"];
+            
+            if (steps.isNull() || swings.isNull()) {
+                LOGLN("SD_LOAD_ERROR: Pattern %d is missing 's' or 'sw' arrays!", p);
+                continue;
+            }
+
+            for (int t = 0; t < NUM_TRACKS; t++) {
+                uint16_t mask = steps[t].as<uint16_t>();
+                
+                if (p == 0 && t == 0) {
+                    LOGLN("SD_LOAD_DEBUG: Pat 0 Trk 0 Mask reads as: %u", mask);
+                }
+
+                for (int s = 0; s < NUM_STEPS; s++) {
+                    _patternPool[p].steps[t][s] = (mask >> s) & 1;
+                }
+                _patternPool[p].trackSwing[t] = swings[t].as<uint8_t>();
+            }
+            p++;
+        }
+    } else {
+        LOGLN("SD_LOAD_ERROR: 'patterns' array not found or is null!");
+    }
 }

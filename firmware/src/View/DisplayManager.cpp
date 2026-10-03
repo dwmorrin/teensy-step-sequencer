@@ -138,6 +138,30 @@ void DisplayManager::update()
       }
       _u8g2.drawStr(x - 6, y, ">");
     }
+    // SAVING...
+    else if (millis() - _ui.getLastSaveTime() < 1000)
+    {
+      _u8g2.setDrawColor(0);
+      _u8g2.drawBox(20, 20, 88, 30);
+      _u8g2.setDrawColor(1);
+      _u8g2.drawFrame(20, 20, 88, 30);
+
+      _u8g2.setFont(u8g2_font_6x10_tf);
+      _u8g2.setCursor(35, 40);
+      _u8g2.print("SAVING...");
+    }
+    // LOADING...
+    else if (millis() - _ui.getLastLoadTime() < 1000)
+    {
+      _u8g2.setDrawColor(0);
+      _u8g2.drawBox(20, 20, 88, 30);
+      _u8g2.setDrawColor(1);
+      _u8g2.drawFrame(20, 20, 88, 30);
+
+      _u8g2.setFont(u8g2_font_6x10_tf);
+      _u8g2.setCursor(30, 40);
+      _u8g2.print("LOADING...");
+    }
     // SWING OVERLAY (Transient: Shows for 1.5 seconds)
     else if (millis() - _ui.getLastSwingChangeTime() < 1500)
     {
@@ -196,13 +220,13 @@ void DisplayManager::_drawHeader()
   // Pattern Status
   _u8g2.setCursor(20, 8);
 
-  // NEW: Transition Visualization
+  // transition visualization
   int pending = _model.getPendingPatternID();
   int playing = _model.getPlayingPatternID();
 
   if (pending != playing)
   {
-    // Transitioning! Blink the Target
+    // transitioning: blink the target
     _u8g2.print(playing + 1);
     _u8g2.print(">");
     if ((millis() / 150) % 2 == 0)
@@ -218,6 +242,13 @@ void DisplayManager::_drawHeader()
       _u8g2.print("0");
     _u8g2.print(playing + 1);
   }
+
+  // edit/perform mode indicator
+  _u8g2.setCursor(58, 8);
+  if (_ui.getMode() == UI_MODE_PERFORM)
+    _u8g2.print(TRACK_PERFORM_STR);
+  else
+    _u8g2.print(TRACK_EDIT_STR);
 
   // Mode
   _u8g2.setCursor(65, 8);
