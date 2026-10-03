@@ -612,7 +612,7 @@ void UIManager::_handleTrigger(int stepIndex)
 {
   if (_currentMode == UI_MODE_PERFORM)
   {
-    if (stepIndex < 4)
+    if (stepIndex < NUM_TRACKS)
       _clock.manualTrigger(1 << stepIndex);
   }
   else

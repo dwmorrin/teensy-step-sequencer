@@ -45,7 +45,7 @@ A interrupt-driven step sequencer for Teensy 4.1.
 
 | Control       | Action                           |
 | :------------ | :------------------------------- |
-| **Steps 1-4** | Manual Trigger / Finger Drumming |
+| **Steps 1-8** | Manual Trigger / Finger Drumming |
 
 ### Song Mode (Playlist)
 
